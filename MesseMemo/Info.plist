@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSCameraUsageDescription</key>
+	<string>MesseMemo benötigt Zugriff auf die Kamera, um Visitenkarten zu scannen und Kontaktdaten automatisch zu erfassen.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>MesseMemo benötigt Zugriff auf das Mikrofon, um Sprachnotizen zu Ihren Kontakten aufzunehmen.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>MesseMemo benötigt Zugriff auf die Spracherkennung, um Ihre Sprachnotizen automatisch in Text umzuwandeln.</string>
+</dict>
+</plist>
+

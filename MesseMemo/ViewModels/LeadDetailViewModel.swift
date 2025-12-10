@@ -18,6 +18,7 @@ final class LeadDetailViewModel: ObservableObject {
     
     let lead: Lead
     let audioService = AudioService()
+    let transcriptionManager = TranscriptionManager()
     
     // MARK: - Published Properties
     
@@ -25,6 +26,9 @@ final class LeadDetailViewModel: ObservableObject {
     @Published var showDeleteConfirmation = false
     @Published var showError = false
     @Published var errorMessage = ""
+    @Published var showMailComposer = false
+    @Published var isTranscribing = false
+    @Published var showTranscriptionSuccess = false
     
     // MARK: - Edit Mode Properties
     
@@ -33,6 +37,7 @@ final class LeadDetailViewModel: ObservableObject {
     @Published var editEmail = ""
     @Published var editPhone = ""
     @Published var editNotes = ""
+    @Published var editTranscript = ""
     
     // MARK: - Initialization
     
@@ -50,6 +55,7 @@ final class LeadDetailViewModel: ObservableObject {
         editEmail = lead.email
         editPhone = lead.phone
         editNotes = lead.notes
+        editTranscript = lead.transcript ?? ""
     }
     
     /// Speichert die Änderungen
@@ -59,6 +65,7 @@ final class LeadDetailViewModel: ObservableObject {
         lead.email = editEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         lead.phone = editPhone.trimmingCharacters(in: .whitespacesAndNewlines)
         lead.notes = editNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        lead.transcript = editTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : editTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         lead.updatedAt = Date()
         
         isEditing = false
@@ -104,9 +111,35 @@ final class LeadDetailViewModel: ObservableObject {
         return AudioService.formatTime(duration)
     }
     
+    // MARK: - Transcription
+    
+    /// Startet die Transkription der Audio-Notiz
+    func transcribeAudio() async {
+        guard let audioPath = lead.audioFilePath else {
+            errorMessage = "Keine Audio-Notiz vorhanden."
+            showError = true
+            return
+        }
+        
+        isTranscribing = true
+        
+        do {
+            let transcript = try await transcriptionManager.transcribe(audioPath: audioPath)
+            lead.transcript = transcript
+            lead.updatedAt = Date()
+            editTranscript = transcript
+            showTranscriptionSuccess = true
+        } catch {
+            errorMessage = error.localizedDescription
+            showError = true
+        }
+        
+        isTranscribing = false
+    }
+    
     // MARK: - Actions
     
-    /// Öffnet die E-Mail-App
+    /// Öffnet die E-Mail-App (einfaches mailto:)
     func openMail() {
         guard !lead.email.isEmpty,
               let url = URL(string: "mailto:\(lead.email)") else { return }
@@ -121,6 +154,16 @@ final class LeadDetailViewModel: ObservableObject {
         UIApplication.shared.open(url)
     }
     
+    /// Öffnet LinkedIn-Suche für diesen Kontakt
+    func openLinkedIn() {
+        guard let url = lead.linkedInSearchURL else {
+            errorMessage = "Kein Name oder Firma vorhanden für die LinkedIn-Suche."
+            showError = true
+            return
+        }
+        UIApplication.shared.open(url)
+    }
+    
     /// Kopiert alle Kontaktdaten in die Zwischenablage
     func copyToClipboard() {
         var text = ""
@@ -128,9 +171,25 @@ final class LeadDetailViewModel: ObservableObject {
         if !lead.company.isEmpty { text += "Firma: \(lead.company)\n" }
         if !lead.email.isEmpty { text += "E-Mail: \(lead.email)\n" }
         if !lead.phone.isEmpty { text += "Telefon: \(lead.phone)\n" }
-        if !lead.notes.isEmpty { text += "Notizen: \(lead.notes)" }
+        if !lead.notes.isEmpty { text += "Notizen: \(lead.notes)\n" }
+        if let transcript = lead.transcript, !transcript.isEmpty {
+            text += "Transkript: \(transcript)"
+        }
         
         UIPasteboard.general.string = text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+    
+    // MARK: - Mail Composer
+    
+    /// Generiert die Follow-Up Mail Daten
+    var followUpMailData: (recipients: [String], subject: String, body: String) {
+        let mail = FollowUpMailGenerator.generateFollowUpMail(for: lead)
+        let recipients = lead.email.isEmpty ? [] : [lead.email]
+        return (recipients, mail.subject, mail.body)
+    }
+    
+    /// Prüft ob Mail-Composer verfügbar ist
+    var canSendMail: Bool {
+        MailComposerView.canSendMail
+    }
 }
-

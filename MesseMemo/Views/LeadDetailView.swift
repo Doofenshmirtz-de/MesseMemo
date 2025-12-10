@@ -40,15 +40,20 @@ struct LeadDetailView: View {
                 contactSection
             }
             
-            // Audio-Notiz
-            if viewModel.lead.hasAudioNote {
-                audioSection
+            // Audio-Notiz & Transkript
+            if viewModel.lead.hasAudioNote || viewModel.lead.hasTranscript {
+                audioAndTranscriptSection
             }
             
             // Notizen
             notesSection
             
-            // Aktionen
+            // Quick Actions (LinkedIn, Mail etc.)
+            if !viewModel.isEditing {
+                quickActionsSection
+            }
+            
+            // Weitere Aktionen
             if !viewModel.isEditing {
                 actionsSection
             }
@@ -74,6 +79,21 @@ struct LeadDetailView: View {
             Button("OK", role: .cancel) { }
         } message: {
             Text(viewModel.errorMessage)
+        }
+        .alert("Transkription erfolgreich", isPresented: $viewModel.showTranscriptionSuccess) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Die Sprachnotiz wurde erfolgreich in Text umgewandelt.")
+        }
+        .sheet(isPresented: $viewModel.showMailComposer) {
+            if viewModel.canSendMail {
+                let mailData = viewModel.followUpMailData
+                MailComposerView(
+                    recipients: mailData.recipients,
+                    subject: mailData.subject,
+                    body: mailData.body
+                )
+            }
         }
         .onDisappear {
             viewModel.stopPlayback()
@@ -193,47 +213,95 @@ struct LeadDetailView: View {
         }
     }
     
-    // MARK: - Audio Section
+    // MARK: - Audio & Transcript Section
     
-    private var audioSection: some View {
+    private var audioAndTranscriptSection: some View {
         Section("Sprachnotiz") {
-            HStack {
-                Button(action: viewModel.toggleAudioPlayback) {
-                    Image(systemName: viewModel.audioService.isPlaying ? "stop.circle.fill" : "play.circle.fill")
-                        .font(.title)
-                        .foregroundStyle(Color.accentColor)
-                }
-                .buttonStyle(.plain)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Audio-Notiz")
-                        .font(.headline)
-                    
-                    if viewModel.audioService.isPlaying {
-                        Text(AudioService.formatTime(viewModel.audioService.playbackTime))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    } else if let duration = viewModel.audioDuration {
-                        Text("Dauer: \(duration)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+            // Audio Player
+            if viewModel.lead.hasAudioNote {
+                HStack {
+                    Button(action: viewModel.toggleAudioPlayback) {
+                        Image(systemName: viewModel.audioService.isPlaying ? "stop.circle.fill" : "play.circle.fill")
+                            .font(.title)
+                            .foregroundStyle(Color.accentColor)
                     }
-                }
-                
-                Spacer()
-                
-                if viewModel.audioService.isPlaying {
-                    // Waveform Animation
-                    HStack(spacing: 2) {
-                        ForEach(0..<5, id: \.self) { index in
-                            WaveformBar(index: index)
+                    .buttonStyle(.plain)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Audio-Notiz")
+                            .font(.headline)
+                        
+                        if viewModel.audioService.isPlaying {
+                            Text(AudioService.formatTime(viewModel.audioService.playbackTime))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        } else if let duration = viewModel.audioDuration {
+                            Text("Dauer: \(duration)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .frame(width: 30, height: 20)
+                    
+                    Spacer()
+                    
+                    if viewModel.audioService.isPlaying {
+                        // Waveform Animation
+                        HStack(spacing: 2) {
+                            ForEach(0..<5, id: \.self) { index in
+                                WaveformBar(index: index)
+                            }
+                        }
+                        .frame(width: 30, height: 20)
+                    }
+                }
+                .padding(.vertical, 4)
+                
+                // Transkription Button
+                if !viewModel.lead.hasTranscript {
+                    Button(action: {
+                        Task {
+                            await viewModel.transcribeAudio()
+                        }
+                    }) {
+                        HStack {
+                            if viewModel.isTranscribing {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                Text("Transkribiere...")
+                            } else {
+                                Image(systemName: "text.bubble")
+                                Text("In Text umwandeln")
+                            }
+                        }
+                    }
+                    .disabled(viewModel.isTranscribing)
                 }
             }
-            .padding(.vertical, 4)
+            
+            // Transkript anzeigen
+            if viewModel.lead.hasTranscript {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "text.quote")
+                            .foregroundStyle(.secondary)
+                        Text("Transkript")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    if viewModel.isEditing {
+                        TextEditor(text: $viewModel.editTranscript)
+                            .frame(minHeight: 80)
+                    } else {
+                        Text(viewModel.lead.transcript ?? "")
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
         }
     }
     
@@ -249,6 +317,41 @@ struct LeadDetailView: View {
                     .foregroundStyle(.secondary)
             } else {
                 Text(viewModel.lead.notes)
+            }
+        }
+    }
+    
+    // MARK: - Quick Actions Section
+    
+    private var quickActionsSection: some View {
+        Section("Schnellaktionen") {
+            // LinkedIn Button
+            Button(action: viewModel.openLinkedIn) {
+                HStack {
+                    Image(systemName: "link")
+                        .foregroundStyle(.blue)
+                    Text("Auf LinkedIn suchen")
+                    Spacer()
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .disabled(viewModel.lead.name.isEmpty && viewModel.lead.company.isEmpty)
+            
+            // Follow-Up Mail Button
+            if viewModel.canSendMail {
+                Button(action: { viewModel.showMailComposer = true }) {
+                    HStack {
+                        Image(systemName: "envelope.badge")
+                            .foregroundStyle(.orange)
+                        Text("Follow-Up E-Mail senden")
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
             }
         }
     }
@@ -333,9 +436,9 @@ struct WaveformBar: View {
             company: "Beispiel GmbH",
             email: "max@beispiel.de",
             phone: "+49 123 456789",
-            notes: "Interessiert an unserem Premium-Paket. Rückruf nächste Woche vereinbart."
+            notes: "Interessiert an unserem Premium-Paket. Rückruf nächste Woche vereinbart.",
+            transcript: "Das war ein sehr interessantes Gespräch über die neuen Produkte."
         ))
     }
     .modelContainer(for: Lead.self, inMemory: true)
 }
-

@@ -32,6 +32,9 @@ final class Lead {
     /// Pfad zur Audio-Notiz Datei (relativ zum Documents Verzeichnis)
     var audioFilePath: String?
     
+    /// Transkript der Sprachnotiz (Speech-to-Text)
+    var transcript: String?
+    
     /// Zeitpunkt der Erfassung
     var createdAt: Date
     
@@ -46,6 +49,7 @@ final class Lead {
         phone: String = "",
         notes: String = "",
         audioFilePath: String? = nil,
+        transcript: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -56,6 +60,7 @@ final class Lead {
         self.phone = phone
         self.notes = notes
         self.audioFilePath = audioFilePath
+        self.transcript = transcript
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -71,6 +76,26 @@ final class Lead {
     var hasAudioNote: Bool {
         guard let url = audioFileURL else { return false }
         return FileManager.default.fileExists(atPath: url.path)
+    }
+    
+    /// Prüft ob ein Transkript vorhanden ist
+    var hasTranscript: Bool {
+        guard let transcript = transcript else { return false }
+        return !transcript.isEmpty
+    }
+    
+    /// Generiert die LinkedIn-Such-URL für diesen Kontakt
+    var linkedInSearchURL: URL? {
+        var searchTerms: [String] = []
+        if !name.isEmpty { searchTerms.append(name) }
+        if !company.isEmpty { searchTerms.append(company) }
+        
+        guard !searchTerms.isEmpty else { return nil }
+        
+        let keywords = searchTerms.joined(separator: " ")
+        guard let encoded = keywords.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
+        
+        return URL(string: "https://www.linkedin.com/search/results/all/?keywords=\(encoded)")
     }
     
     /// Formatiertes Erstellungsdatum
