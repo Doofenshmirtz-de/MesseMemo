@@ -34,7 +34,25 @@ final class AudioService: NSObject, ObservableObject {
     
     override init() {
         super.init()
+        setupAudioSession()
         checkPermission()
+    }
+    
+    // MARK: - Audio Session Setup
+    
+    /// Konfiguriert die Audio-Session für Aufnahme und Wiedergabe
+    private func setupAudioSession() {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            // Kategorie für Aufnahme und Wiedergabe setzen
+            try session.setCategory(
+                .playAndRecord,
+                mode: .default,
+                options: [.defaultToSpeaker, .allowBluetooth]
+            )
+        } catch {
+            print("AudioService: Fehler beim Setup der Audio-Session: \(error.localizedDescription)")
+        }
     }
     
     // MARK: - Permission Handling
@@ -43,13 +61,19 @@ final class AudioService: NSObject, ObservableObject {
     func checkPermission() {
         switch AVAudioSession.sharedInstance().recordPermission {
         case .granted:
-            permissionGranted = true
+            DispatchQueue.main.async {
+                self.permissionGranted = true
+            }
         case .denied:
-            permissionGranted = false
+            DispatchQueue.main.async {
+                self.permissionGranted = false
+            }
         case .undetermined:
             requestPermission()
         @unknown default:
-            permissionGranted = false
+            DispatchQueue.main.async {
+                self.permissionGranted = false
+            }
         }
     }
     
@@ -58,6 +82,9 @@ final class AudioService: NSObject, ObservableObject {
         AVAudioSession.sharedInstance().requestRecordPermission { [weak self] granted in
             DispatchQueue.main.async {
                 self?.permissionGranted = granted
+                if granted {
+                    self?.setupAudioSession()
+                }
             }
         }
     }
@@ -73,47 +100,91 @@ final class AudioService: NSObject, ObservableObject {
             throw AudioError.permissionDenied
         }
         
-        // Audio Session konfigurieren
+        // Stoppe eventuelle laufende Wiedergabe
+        if isPlaying {
+            stopPlayback()
+        }
+        
+        // Audio Session aktivieren
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
-        try session.setActive(true)
+        do {
+            try session.setCategory(
+                .playAndRecord,
+                mode: .default,
+                options: [.defaultToSpeaker, .allowBluetooth]
+            )
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            print("AudioService: Fehler beim Aktivieren der Session: \(error.localizedDescription)")
+            throw AudioError.recordingFailed
+        }
         
         // Datei-URL erstellen
         let fileName = "audio_\(leadId.uuidString).m4a"
         let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let audioURL = documentsURL.appendingPathComponent(fileName)
         
+        // Lösche existierende Datei falls vorhanden
+        if FileManager.default.fileExists(atPath: audioURL.path) {
+            try? FileManager.default.removeItem(at: audioURL)
+        }
+        
         currentRecordingURL = audioURL
         
-        // Recorder-Einstellungen
+        // Recorder-Einstellungen (optimiert für Sprachaufnahme)
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-            AVSampleRateKey: 44100.0,
+            AVSampleRateKey: 22050.0,  // Reduziert für Sprache
             AVNumberOfChannelsKey: 1,
-            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+            AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue,
+            AVEncoderBitRateKey: 32000
         ]
         
-        // Recorder initialisieren und starten
-        audioRecorder = try AVAudioRecorder(url: audioURL, settings: settings)
-        audioRecorder?.delegate = self
-        audioRecorder?.record()
-        
-        isRecording = true
-        recordingTime = 0
-        startRecordingTimer()
-        
-        return fileName
+        do {
+            // Recorder initialisieren
+            audioRecorder = try AVAudioRecorder(url: audioURL, settings: settings)
+            audioRecorder?.delegate = self
+            audioRecorder?.isMeteringEnabled = true
+            
+            // Vorbereiten und starten
+            if audioRecorder?.prepareToRecord() == true {
+                if audioRecorder?.record() == true {
+                    DispatchQueue.main.async {
+                        self.isRecording = true
+                        self.recordingTime = 0
+                        self.startRecordingTimer()
+                    }
+                    return fileName
+                } else {
+                    throw AudioError.recordingFailed
+                }
+            } else {
+                throw AudioError.recordingFailed
+            }
+        } catch {
+            print("AudioService: Fehler beim Starten der Aufnahme: \(error.localizedDescription)")
+            throw AudioError.recordingFailed
+        }
     }
     
     /// Stoppt die aktuelle Aufnahme
     func stopRecording() {
+        guard isRecording else { return }
+        
         audioRecorder?.stop()
         audioRecorder = nil
-        isRecording = false
-        stopRecordingTimer()
+        
+        DispatchQueue.main.async {
+            self.isRecording = false
+            self.stopRecordingTimer()
+        }
         
         // Audio Session deaktivieren
-        try? AVAudioSession.sharedInstance().setActive(false)
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            print("AudioService: Fehler beim Deaktivieren der Session: \(error.localizedDescription)")
+        }
     }
     
     /// Löscht die letzte Aufnahme
@@ -129,6 +200,11 @@ final class AudioService: NSObject, ObservableObject {
     /// Spielt eine Audiodatei ab
     /// - Parameter path: Relativer Pfad zur Audiodatei
     func play(from path: String) throws {
+        // Stoppe eventuelle laufende Aufnahme
+        if isRecording {
+            stopRecording()
+        }
+        
         let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let audioURL = documentsURL.appendingPathComponent(path)
         
@@ -138,28 +214,54 @@ final class AudioService: NSObject, ObservableObject {
         
         // Audio Session für Wiedergabe konfigurieren
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playback, mode: .default)
-        try session.setActive(true)
+        do {
+            try session.setCategory(.playback, mode: .default, options: [.defaultToSpeaker])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            print("AudioService: Fehler beim Aktivieren der Playback-Session: \(error.localizedDescription)")
+            throw AudioError.playbackFailed
+        }
         
-        audioPlayer = try AVAudioPlayer(contentsOf: audioURL)
-        audioPlayer?.delegate = self
-        playbackDuration = audioPlayer?.duration ?? 0
-        playbackTime = 0
-        audioPlayer?.play()
-        
-        isPlaying = true
-        startPlaybackTimer()
+        do {
+            audioPlayer = try AVAudioPlayer(contentsOf: audioURL)
+            audioPlayer?.delegate = self
+            audioPlayer?.prepareToPlay()
+            
+            DispatchQueue.main.async {
+                self.playbackDuration = self.audioPlayer?.duration ?? 0
+                self.playbackTime = 0
+            }
+            
+            if audioPlayer?.play() == true {
+                DispatchQueue.main.async {
+                    self.isPlaying = true
+                    self.startPlaybackTimer()
+                }
+            } else {
+                throw AudioError.playbackFailed
+            }
+        } catch {
+            print("AudioService: Fehler beim Starten der Wiedergabe: \(error.localizedDescription)")
+            throw AudioError.playbackFailed
+        }
     }
     
     /// Stoppt die Wiedergabe
     func stopPlayback() {
         audioPlayer?.stop()
         audioPlayer = nil
-        isPlaying = false
-        playbackTime = 0
-        stopPlaybackTimer()
         
-        try? AVAudioSession.sharedInstance().setActive(false)
+        DispatchQueue.main.async {
+            self.isPlaying = false
+            self.playbackTime = 0
+            self.stopPlaybackTimer()
+        }
+        
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            print("AudioService: Fehler beim Deaktivieren der Session: \(error.localizedDescription)")
+        }
     }
     
     /// Pausiert oder setzt die Wiedergabe fort
@@ -168,20 +270,27 @@ final class AudioService: NSObject, ObservableObject {
         
         if player.isPlaying {
             player.pause()
-            isPlaying = false
-            stopPlaybackTimer()
+            DispatchQueue.main.async {
+                self.isPlaying = false
+                self.stopPlaybackTimer()
+            }
         } else {
             player.play()
-            isPlaying = true
-            startPlaybackTimer()
+            DispatchQueue.main.async {
+                self.isPlaying = true
+                self.startPlaybackTimer()
+            }
         }
     }
     
     // MARK: - Timer Management
     
     private func startRecordingTimer() {
+        stopRecordingTimer()
         recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            self?.recordingTime += 0.1
+            DispatchQueue.main.async {
+                self?.recordingTime += 0.1
+            }
         }
     }
     
@@ -191,9 +300,12 @@ final class AudioService: NSObject, ObservableObject {
     }
     
     private func startPlaybackTimer() {
+        stopPlaybackTimer()
         playbackTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             guard let self = self, let player = self.audioPlayer else { return }
-            self.playbackTime = player.currentTime
+            DispatchQueue.main.async {
+                self.playbackTime = player.currentTime
+            }
         }
     }
     
@@ -215,6 +327,10 @@ final class AudioService: NSObject, ObservableObject {
     func getDuration(for path: String) -> TimeInterval? {
         let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let audioURL = documentsURL.appendingPathComponent(path)
+        
+        guard FileManager.default.fileExists(atPath: audioURL.path) else {
+            return nil
+        }
         
         guard let player = try? AVAudioPlayer(contentsOf: audioURL) else {
             return nil
@@ -287,4 +403,3 @@ enum AudioError: Error, LocalizedError {
         }
     }
 }
-

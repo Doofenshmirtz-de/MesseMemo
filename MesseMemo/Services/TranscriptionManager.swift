@@ -8,17 +8,18 @@
 import Foundation
 import Speech
 import AVFoundation
+import Observation
 
 /// Manager für Speech-to-Text Transkription mittels Apple's SFSpeechRecognizer
-@MainActor
-final class TranscriptionManager: ObservableObject {
+@Observable
+final class TranscriptionManager {
     
-    // MARK: - Published Properties
+    // MARK: - Properties
     
-    @Published var isTranscribing = false
-    @Published var transcriptionProgress: Double = 0
-    @Published var permissionGranted = false
-    @Published var errorMessage: String?
+    var isTranscribing = false
+    var transcriptionProgress: Double = 0
+    var permissionGranted = false
+    var errorMessage: String?
     
     // MARK: - Private Properties
     
@@ -54,7 +55,7 @@ final class TranscriptionManager: ObservableObject {
     /// Fordert die Spracherkennungs-Berechtigung an
     func requestPermission() {
         SFSpeechRecognizer.requestAuthorization { [weak self] status in
-            Task { @MainActor in
+            DispatchQueue.main.async {
                 self?.permissionGranted = (status == .authorized)
             }
         }
@@ -65,6 +66,7 @@ final class TranscriptionManager: ObservableObject {
     /// Transkribiert eine Audio-Datei zu Text
     /// - Parameter audioPath: Relativer Pfad zur Audio-Datei im Documents-Verzeichnis
     /// - Returns: Der transkribierte Text
+    @MainActor
     func transcribe(audioPath: String) async throws -> String {
         guard permissionGranted else {
             throw TranscriptionError.permissionDenied
@@ -96,9 +98,8 @@ final class TranscriptionManager: ObservableObject {
             request.shouldReportPartialResults = false
             request.addsPunctuation = true
             
-            // Task ID für Progress-Tracking
             recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-                Task { @MainActor in
+                DispatchQueue.main.async {
                     if let error = error {
                         self?.recognitionTask = nil
                         continuation.resume(throwing: TranscriptionError.transcriptionFailed(error.localizedDescription))
@@ -157,4 +158,3 @@ enum TranscriptionError: Error, LocalizedError {
         }
     }
 }
-

@@ -257,7 +257,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "MesseMemo benötigt Zugriff auf die Kamera, um Visitenkarten zu scannen und Kontaktdaten automatisch zu erfassen.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "esseMemo benötigt Zugriff auf das Mikrofon, um Sprachnotizen zu Ihren Kontakten aufzunehmen.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "MesseMemo benötigt Zugriff auf das Mikrofon, um Sprachnotizen zu Ihren Kontakten aufzunehmen.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "MesseMemo benötigt Spracherkennung um Notizen zu transkribieren.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -291,7 +292,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "MesseMemo benötigt Zugriff auf die Kamera, um Visitenkarten zu scannen und Kontaktdaten automatisch zu erfassen.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "esseMemo benötigt Zugriff auf das Mikrofon, um Sprachnotizen zu Ihren Kontakten aufzunehmen.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "MesseMemo benötigt Zugriff auf das Mikrofon, um Sprachnotizen zu Ihren Kontakten aufzunehmen.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "MesseMemo benötigt Spracherkennung um Notizen zu transkribieren.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
