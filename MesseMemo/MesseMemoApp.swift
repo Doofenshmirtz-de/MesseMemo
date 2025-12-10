@@ -10,22 +10,30 @@ import SwiftData
 
 @main
 struct MesseMemoApp: App {
+    
+    // MARK: - Model Container
+    
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            Lead.self,
         ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        let modelConfiguration = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: false
+        )
 
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            fatalError("ModelContainer konnte nicht erstellt werden: \(error)")
         }
     }()
 
+    // MARK: - Body
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            DashboardView()
         }
         .modelContainer(sharedModelContainer)
     }
