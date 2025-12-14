@@ -4,6 +4,11 @@
 //
 //  Created by Jarno Kibies on 10.12.25.
 //
+//  ARCHITEKTUR:
+//  - Leads werden lokal via SwiftData gespeichert
+//  - CloudKit synchronisiert automatisch über alle Geräte
+//  - Supabase nur für Auth & KI-Funktionen
+//
 
 import SwiftUI
 import SwiftData
@@ -12,20 +17,30 @@ import Supabase
 @main
 struct MesseMemoApp: App {
     
-    // MARK: - Model Container
+    // MARK: - Model Container (mit CloudKit Sync)
     
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Lead.self,
         ])
+        
+        // ModelConfiguration mit CloudKit
+        // WICHTIG: CloudKit sync passiert automatisch wenn:
+        // 1. iCloud Capability aktiviert ist
+        // 2. CloudKit Container konfiguriert ist
+        // 3. User bei iCloud eingeloggt ist
         let modelConfiguration = ModelConfiguration(
             schema: schema,
-            isStoredInMemoryOnly: false
+            isStoredInMemoryOnly: false,
+            // CloudKit wird automatisch verwendet wenn die Capability aktiviert ist
+            // Für explizite Kontrolle: cloudKitDatabase: .automatic
+            cloudKitDatabase: .automatic
         )
 
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
+            // In Production: Crashlytics/Sentry Logging
             fatalError("ModelContainer konnte nicht erstellt werden: \(error)")
         }
     }()

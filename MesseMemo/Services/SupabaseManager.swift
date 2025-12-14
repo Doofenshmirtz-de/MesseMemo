@@ -4,6 +4,10 @@
 //
 //  Created by Jarno Kibies on 14.12.25.
 //
+//  ARCHITEKTUR-HINWEIS:
+//  Supabase wird NUR für Auth und KI-Funktionen verwendet.
+//  Lead-Daten werden lokal via SwiftData + CloudKit gespeichert (Datenschutz).
+//
 
 import Foundation
 import Combine
@@ -27,7 +31,8 @@ enum SupabaseConfig {
 // MARK: - SupabaseManager
 // ============================================
 
-/// Singleton Manager für alle Supabase-Operationen
+/// Singleton Manager für Supabase Auth & KI-Funktionen
+/// Hinweis: Lead-Daten werden NICHT über Supabase gespeichert!
 final class SupabaseManager: ObservableObject {
     
     // MARK: - Singleton
@@ -60,7 +65,9 @@ final class SupabaseManager: ObservableObject {
         }
     }
     
+    // ============================================
     // MARK: - Auth State
+    // ============================================
     
     /// Prüft den aktuellen Auth-Status
     @MainActor
@@ -77,7 +84,9 @@ final class SupabaseManager: ObservableObject {
         }
     }
     
+    // ============================================
     // MARK: - Authentication
+    // ============================================
     
     /// Registriert einen neuen User
     @MainActor
@@ -98,7 +107,7 @@ final class SupabaseManager: ObservableObject {
                 self.isAuthenticated = true
                 await loadUserProfile()
             }
-            // Ohne Session = Email-Bestätigung erforderlich (normal bei Registrierung)
+            // Ohne Session = Email-Bestätigung erforderlich
         } catch {
             errorMessage = mapAuthError(error)
             throw error
@@ -168,9 +177,11 @@ final class SupabaseManager: ObservableObject {
         }
     }
     
-    // MARK: - User Profile
+    // ============================================
+    // MARK: - User Profile & Credits
+    // ============================================
     
-    /// Lädt das User-Profil
+    /// Lädt das User-Profil (inkl. Credits)
     @MainActor
     func loadUserProfile() async {
         guard let userId = currentUserId else { return }
@@ -190,106 +201,34 @@ final class SupabaseManager: ObservableObject {
         }
     }
     
-    // MARK: - Leads CRUD
-    
-    /// Lädt alle Leads des Users
-    func fetchLeads() async throws -> [SupabaseLead] {
-        let response = try await client
-            .from("leads")
-            .select()
-            .order("created_at", ascending: false)
-            .execute()
-        
-        let leads = try JSONDecoder().decode([SupabaseLead].self, from: response.data)
-        return leads
+    /// Aktualisiert das User-Profil (z.B. nach Credit-Verbrauch)
+    @MainActor
+    func refreshProfile() async {
+        await loadUserProfile()
     }
     
-    /// Erstellt einen neuen Lead
-    func createLead(_ lead: SupabaseLead) async throws -> SupabaseLead {
-        guard let userId = currentUserId else {
-            throw SupabaseError.notAuthenticated
-        }
-        
-        var newLead = lead
-        newLead.userId = userId
-        
-        let encoder = JSONEncoder()
-        let data = try encoder.encode(newLead)
-        
-        let response = try await client
-            .from("leads")
-            .insert(data)
-            .select()
-            .single()
-            .execute()
-        
-        let createdLead = try JSONDecoder().decode(SupabaseLead.self, from: response.data)
-        return createdLead
+    /// Gibt die aktuelle Anzahl der KI-Credits zurück
+    var currentCredits: Int {
+        userProfile?.aiCreditsBalance ?? 0
     }
     
-    /// Aktualisiert einen Lead
-    func updateLead(_ lead: SupabaseLead) async throws {
-        guard let id = lead.id else { return }
-        
-        let encoder = JSONEncoder()
-        let data = try encoder.encode(lead)
-        
-        try await client
-            .from("leads")
-            .update(data)
-            .eq("id", value: id.uuidString)
-            .execute()
+    /// Prüft, ob der User genug Credits für eine KI-Generierung hat
+    var hasCredits: Bool {
+        currentCredits > 0
     }
     
-    /// Löscht einen Lead
-    func deleteLead(id: UUID) async throws {
-        try await client
-            .from("leads")
-            .delete()
-            .eq("id", value: id.uuidString)
-            .execute()
-    }
-    
-    // MARK: - Audio Storage
-    
-    /// Lädt eine Audio-Datei hoch
-    func uploadAudio(data: Data, fileName: String) async throws -> String {
-        guard let userId = currentUserId else {
-            throw SupabaseError.notAuthenticated
-        }
-        
-        let path = "\(userId.uuidString)/\(fileName)"
-        
-        try await client.storage
-            .from("voice-memos")
-            .upload(
-                path: path,
-                file: data,
-                options: FileOptions(contentType: "audio/m4a")
-            )
-        
-        return path
-    }
-    
-    /// Holt die signierte URL einer Audio-Datei
-    func getAudioURL(path: String) async throws -> URL {
-        try await client.storage
-            .from("voice-memos")
-            .createSignedURL(path: path, expiresIn: 3600)
-    }
-    
-    /// Löscht eine Audio-Datei
-    func deleteAudio(path: String) async throws {
-        try await client.storage
-            .from("voice-memos")
-            .remove(paths: [path])
-    }
-    
-    // MARK: - AI Email Generation
+    // ============================================
+    // MARK: - AI Email Generation (Edge Function)
+    // ============================================
     
     /// Generiert eine Follow-Up E-Mail via Edge Function
-    /// Hinweis: Edge Function muss erst deployed werden!
-    func generateEmail(name: String, company: String, transcript: String, leadId: UUID? = nil) async throws -> GeneratedEmail {
+    /// Verbraucht 1 Credit bei Erfolg
+    /// - Returns: Generierte E-Mail mit Betreff und Body, sowie verbleibende Credits
+    func generateEmail(
+        name: String,
+        company: String,
+        transcript: String
+    ) async throws -> GeneratedEmailResult {
         guard isAuthenticated else {
             throw SupabaseError.notAuthenticated
         }
@@ -298,24 +237,45 @@ final class SupabaseManager: ObservableObject {
         let requestBody: [String: String] = [
             "name": name,
             "company": company,
-            "transcript": transcript,
-            "leadId": leadId?.uuidString ?? ""
+            "transcript": transcript
         ]
         
-        // Edge Function aufrufen
+        // Edge Function aufrufen (prüft Credits serverseitig)
         let response: GenerateEmailResponse = try await client.functions.invoke(
             "generate-email",
             options: FunctionInvokeOptions(body: requestBody)
         )
         
-        if response.success, let email = response.email, let subject = response.subject {
-            return GeneratedEmail(subject: subject, body: email)
-        } else {
-            throw SupabaseError.emailGenerationFailed(response.error ?? "Unbekannter Fehler")
+        // Fehlerbehandlung
+        if let error = response.error {
+            if error.contains("Kein Guthaben") || error.contains("credits") {
+                throw SupabaseError.noCredits
+            }
+            throw SupabaseError.emailGenerationFailed(error)
         }
+        
+        guard response.success,
+              let email = response.email,
+              let subject = response.subject else {
+            throw SupabaseError.emailGenerationFailed("Unbekannter Fehler")
+        }
+        
+        // Profile aktualisieren um neuen Credit-Stand zu bekommen
+        await MainActor.run {
+            Task {
+                await refreshProfile()
+            }
+        }
+        
+        return GeneratedEmailResult(
+            email: GeneratedEmail(subject: subject, body: email),
+            creditsRemaining: response.creditsRemaining ?? (currentCredits - 1)
+        )
     }
     
+    // ============================================
     // MARK: - Helper
+    // ============================================
     
     private func mapAuthError(_ error: Error) -> String {
         let errorString = error.localizedDescription.lowercased()
@@ -340,12 +300,13 @@ final class SupabaseManager: ObservableObject {
 // MARK: - Data Models
 // ============================================
 
-/// User Profile Modell
+/// User Profile Modell (mit Credit-System)
 struct UserProfile: Codable {
     let id: UUID
     let email: String?
     let isPremium: Bool
     let displayName: String?
+    let aiCreditsBalance: Int
     let createdAt: String
     let updatedAt: String
     
@@ -354,41 +315,21 @@ struct UserProfile: Codable {
         case email
         case isPremium = "is_premium"
         case displayName = "display_name"
+        case aiCreditsBalance = "ai_credits_balance"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
-}
-
-/// Lead Modell für Supabase
-struct SupabaseLead: Codable, Identifiable {
-    var id: UUID?
-    var userId: UUID?
-    var name: String
-    var company: String
-    var email: String
-    var phone: String
-    var noteText: String
-    var transcript: String?
-    var audioUrl: String?
-    var audioDurationSeconds: Int?
-    var generatedEmail: String?
-    var createdAt: String?
-    var updatedAt: String?
     
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case name
-        case company
-        case email
-        case phone
-        case noteText = "note_text"
-        case transcript
-        case audioUrl = "audio_url"
-        case audioDurationSeconds = "audio_duration_seconds"
-        case generatedEmail = "generated_email"
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
+    /// Fallback-Initializer für Profile ohne Credits-Spalte
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        email = try container.decodeIfPresent(String.self, forKey: .email)
+        isPremium = try container.decodeIfPresent(Bool.self, forKey: .isPremium) ?? false
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+        aiCreditsBalance = try container.decodeIfPresent(Int.self, forKey: .aiCreditsBalance) ?? 0
+        createdAt = try container.decode(String.self, forKey: .createdAt)
+        updatedAt = try container.decode(String.self, forKey: .updatedAt)
     }
 }
 
@@ -398,6 +339,15 @@ struct GenerateEmailResponse: Codable {
     let email: String?
     let subject: String?
     let error: String?
+    let creditsRemaining: Int?
+    
+    enum CodingKeys: String, CodingKey {
+        case success
+        case email
+        case subject
+        case error
+        case creditsRemaining = "credits_remaining"
+    }
 }
 
 /// Generierte E-Mail
@@ -406,24 +356,30 @@ struct GeneratedEmail {
     let body: String
 }
 
+/// Ergebnis der E-Mail-Generierung inkl. Credits
+struct GeneratedEmailResult {
+    let email: GeneratedEmail
+    let creditsRemaining: Int
+}
+
 // ============================================
 // MARK: - Errors
 // ============================================
 
 enum SupabaseError: Error, LocalizedError {
     case notAuthenticated
+    case noCredits
     case emailGenerationFailed(String)
-    case uploadFailed
     case networkError
     
     var errorDescription: String? {
         switch self {
         case .notAuthenticated:
             return "Bitte melde dich an, um fortzufahren."
+        case .noCredits:
+            return "Kein Guthaben mehr. Bitte lade dein Konto auf."
         case .emailGenerationFailed(let reason):
             return "E-Mail konnte nicht generiert werden: \(reason)"
-        case .uploadFailed:
-            return "Upload fehlgeschlagen."
         case .networkError:
             return "Keine Internetverbindung."
         }

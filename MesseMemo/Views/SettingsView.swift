@@ -68,16 +68,16 @@ struct SettingsView: View {
         }
     }
     
-    // MARK: - Premium Section
+    // MARK: - Credits Section
     
     private var premiumSection: some View {
         Section {
-            if subscriptionManager.isPremium {
-                // User ist Premium
-                premiumActiveView
-            } else {
-                // User ist Free - zeige Upgrade Banner
-                premiumUpgradeView
+            // Credit Balance Card
+            creditsCardView
+            
+            // Upgrade/Buy Credits Button
+            if !subscriptionManager.isPremium {
+                upgradeButtonView
             }
         }
         .sheet(isPresented: $showPaywall) {
@@ -85,102 +85,122 @@ struct SettingsView: View {
         }
     }
     
-    // MARK: - Premium Active View
+    // MARK: - Credits Card View
     
-    private var premiumActiveView: some View {
+    private var creditsCardView: some View {
         HStack(spacing: 16) {
+            // Icon
             ZStack {
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [.yellow, .orange],
+                            colors: subscriptionManager.isPremium ? [.yellow, .orange] : [.purple, .blue],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .frame(width: 50, height: 50)
                 
-                Image(systemName: "crown.fill")
+                Image(systemName: subscriptionManager.isPremium ? "crown.fill" : "sparkles")
                     .font(.title2)
                     .foregroundStyle(.white)
             }
             
+            // Info
             VStack(alignment: .leading, spacing: 4) {
-                Text("MesseMemo Pro")
-                    .font(.headline)
-                
-                Text("Alle Premium-Features aktiv")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                if subscriptionManager.isPremium {
+                    Text("MesseMemo Pro")
+                        .font(.headline)
+                    
+                    Text("Unbegrenzte Zauber-Mails")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("KI-Guthaben")
+                        .font(.headline)
+                    
+                    Text(subscriptionManager.aiButtonSubtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
             
             Spacer()
             
-            Image(systemName: "checkmark.seal.fill")
-                .font(.title2)
-                .foregroundStyle(.green)
+            // Credit Badge
+            if subscriptionManager.isPremium {
+                HStack(spacing: 4) {
+                    Text("∞")
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.yellow)
+                    
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(.green)
+                }
+            } else {
+                Text("\(subscriptionManager.credits)")
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .foregroundStyle(creditColor)
+            }
         }
         .padding(.vertical, 4)
     }
     
-    // MARK: - Premium Upgrade View
+    // Credit-Farbe basierend auf Anzahl
+    private var creditColor: Color {
+        let credits = subscriptionManager.credits
+        if credits > 10 { return .green }
+        if credits > 3 { return .orange }
+        return .red
+    }
     
-    private var premiumUpgradeView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("MesseMemo Pro")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label("KI-generierte Follow-up Mails", systemImage: "sparkles")
-                        Label("Unbegrenzte Leads", systemImage: "infinity")
-                        Label("Cloud-Sync", systemImage: "icloud")
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                }
-                
-                Spacer()
-                
-                // Decorative circles
-                ZStack {
-                    Circle()
-                        .fill(.blue.opacity(0.3))
-                        .frame(width: 50, height: 50)
-                        .offset(x: 10, y: -10)
-                    
-                    Circle()
-                        .fill(.purple.opacity(0.3))
-                        .frame(width: 40, height: 40)
-                        .offset(x: -15, y: 15)
-                    
-                    Image(systemName: "crown.fill")
-                        .font(.title)
-                        .foregroundStyle(.yellow)
-                }
+    // MARK: - Upgrade Button View
+    
+    private var upgradeButtonView: some View {
+        VStack(spacing: 12) {
+            // Features Liste
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Unbegrenzte Zauber-Mails", systemImage: "sparkles")
+                Label("Unbegrenzte Leads", systemImage: "infinity")
+                Label("Prioritäts-Support", systemImage: "star")
             }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
             
+            // Upgrade Button
             Button {
                 showPaywall = true
-                // Haptic Feedback
                 let impact = UIImpactFeedbackGenerator(style: .medium)
                 impact.impactOccurred()
             } label: {
-                Text("Jetzt upgraden")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(
-                        LinearGradient(
-                            colors: [.blue, .purple],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
+                HStack {
+                    Image(systemName: "crown.fill")
+                    Text("Auf Pro upgraden")
+                        .fontWeight(.semibold)
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(
+                    LinearGradient(
+                        colors: [.blue, .purple],
+                        startPoint: .leading,
+                        endPoint: .trailing
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            
+            // Credits kaufen Link
+            Button {
+                showPaywall = true
+            } label: {
+                Text("Oder Credits nachkaufen")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 8)

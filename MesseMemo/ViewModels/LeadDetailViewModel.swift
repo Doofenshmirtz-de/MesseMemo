@@ -201,6 +201,7 @@ final class LeadDetailViewModel: ObservableObject {
     // MARK: - AI Email Generation
     
     /// Generiert eine KI-basierte Follow-Up E-Mail
+    /// Verbraucht 1 Credit bei Erfolg
     func generateAIEmail() async {
         isGeneratingEmail = true
         
@@ -209,20 +210,22 @@ final class LeadDetailViewModel: ObservableObject {
         generator.impactOccurred()
         
         do {
-            // Prüfe Netzwerk-Verbindung implizit durch den Call
-            let email = try await SupabaseManager.shared.generateEmail(
+            // Generiere E-Mail via Supabase Edge Function
+            let result = try await SupabaseManager.shared.generateEmail(
                 name: lead.name,
                 company: lead.company,
-                transcript: lead.transcript ?? lead.notes,
-                leadId: nil
+                transcript: lead.transcript ?? lead.notes
             )
             
-            generatedAIEmail = email
+            generatedAIEmail = result.email
             showAIMailComposer = true
             
             // Erfolgs-Feedback
             let successGenerator = UINotificationFeedbackGenerator()
             successGenerator.notificationOccurred(.success)
+            
+            // Profile aktualisieren um neuen Credit-Stand anzuzeigen
+            await SupabaseManager.shared.refreshProfile()
             
         } catch {
             // Error-Feedback
@@ -231,7 +234,16 @@ final class LeadDetailViewModel: ObservableObject {
             
             // Benutzerfreundliche Fehlermeldung
             if let supabaseError = error as? SupabaseError {
-                errorMessage = supabaseError.localizedDescription ?? "Ein Fehler ist aufgetreten."
+                switch supabaseError {
+                case .noCredits:
+                    errorMessage = "Kein Guthaben mehr. Bitte lade dein Konto auf, um weitere Mails zu generieren."
+                case .notAuthenticated:
+                    errorMessage = "Bitte melde dich an, um die KI-Funktion zu nutzen."
+                case .emailGenerationFailed(let reason):
+                    errorMessage = "E-Mail konnte nicht generiert werden: \(reason)"
+                case .networkError:
+                    errorMessage = "Keine Internetverbindung. KI-Funktionen benötigen eine aktive Verbindung."
+                }
             } else if error.localizedDescription.lowercased().contains("network") ||
                       error.localizedDescription.lowercased().contains("internet") ||
                       error.localizedDescription.lowercased().contains("offline") {

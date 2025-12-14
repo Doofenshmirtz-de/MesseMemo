@@ -375,20 +375,22 @@ struct LeadDetailView: View {
         }
     }
     
-    // MARK: - AI Mail Button (Premium)
+    // MARK: - AI Mail Button (Credit-System)
     
     @ViewBuilder
     private var aiMailButton: some View {
-        let canAccessAI = subscriptionManager.canAccess(.aiEmailGeneration)
+        let hasCredits = subscriptionManager.hasCredits
+        let credits = subscriptionManager.credits
+        let isPremium = subscriptionManager.isPremium
         
         Button {
-            if canAccessAI {
-                // Premium User: Generiere KI-Mail
+            if hasCredits {
+                // Hat Credits oder ist Premium: Generiere KI-Mail
                 Task {
                     await viewModel.generateAIEmail()
                 }
             } else {
-                // Kein Premium: Zeige Paywall
+                // Keine Credits: Zeige Paywall
                 paywallTriggerFeature = .aiEmailGeneration
                 showPaywall = true
                 
@@ -398,16 +400,27 @@ struct LeadDetailView: View {
             }
         } label: {
             HStack {
-                Image(systemName: "sparkles")
-                    .foregroundStyle(canAccessAI ? .purple : .secondary)
+                // Icon mit Animation während Generierung
+                ZStack {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(hasCredits ? .purple : .secondary)
+                        .opacity(viewModel.isGeneratingEmail ? 0 : 1)
+                    
+                    if viewModel.isGeneratingEmail {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(.purple)
+                            .symbolEffect(.variableColor.iterative)
+                    }
+                }
                 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text("Zauber-Mail generieren")
-                            .foregroundStyle(canAccessAI ? .primary : .secondary)
+                        Text("Zauber-Mail")
+                            .foregroundStyle(hasCredits ? .primary : .secondary)
                         
-                        if !canAccessAI {
-                            Text("PRO")
+                        // Credit Badge
+                        if isPremium {
+                            Text("∞")
                                 .font(.caption2)
                                 .fontWeight(.bold)
                                 .foregroundStyle(.white)
@@ -417,35 +430,61 @@ struct LeadDetailView: View {
                                     Capsule()
                                         .fill(
                                             LinearGradient(
-                                                colors: [.orange, .pink],
+                                                colors: [.yellow, .orange],
                                                 startPoint: .leading,
                                                 endPoint: .trailing
                                             )
                                         )
                                 )
+                        } else if credits > 0 {
+                            Text("\(credits)×")
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule()
+                                        .fill(credits > 5 ? Color.green : (credits > 2 ? Color.orange : Color.red))
+                                )
+                        } else {
+                            Text("0")
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.red)
+                                )
                         }
                     }
                     
-                    if !canAccessAI {
-                        Text("KI-generierte Follow-up E-Mail")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
+                    // Subtitle
+                    Text(subscriptionManager.aiButtonSubtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 
                 Spacer()
                 
+                // Status Icon
                 if viewModel.isGeneratingEmail {
                     ProgressView()
                         .scaleEffect(0.8)
-                } else {
-                    Image(systemName: canAccessAI ? "arrow.up.right" : "lock.fill")
+                } else if hasCredits {
+                    Image(systemName: "arrow.up.right")
                         .font(.caption)
-                        .foregroundColor(canAccessAI ? Color(.tertiaryLabel) : .orange)
+                        .foregroundColor(Color(.tertiaryLabel))
+                } else {
+                    Image(systemName: "cart.badge.plus")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
             }
         }
-        .disabled(viewModel.isGeneratingEmail)
+        .disabled(viewModel.isGeneratingEmail || !hasCredits)
     }
     
     // MARK: - Actions Section

@@ -4,6 +4,11 @@
 //
 //  Created by Jarno Kibies on 14.12.25.
 //
+//  ARCHITEKTUR-HINWEIS:
+//  - Freemium-Modell mit Credit-System
+//  - Neue User bekommen 20 kostenlose Credits
+//  - Pro-User bekommen unbegrenzte Credits (oder können nachkaufen)
+//
 
 import Foundation
 import Combine
@@ -13,8 +18,8 @@ import StoreKit
 // MARK: - Subscription Manager
 // ============================================
 
-/// Zentraler Manager für Premium-Status und In-App Purchases
-/// Singleton-Pattern für globalen Zugriff auf Subscription-Status
+/// Zentraler Manager für Credits und Subscription-Status
+/// Singleton-Pattern für globalen Zugriff
 @MainActor
 final class SubscriptionManager: ObservableObject {
     
@@ -24,10 +29,13 @@ final class SubscriptionManager: ObservableObject {
     
     // MARK: - Published Properties
     
-    /// Gibt an, ob der User Premium-Funktionen nutzen kann
+    /// Aktuelle Anzahl der KI-Credits
+    @Published private(set) var credits: Int = 0
+    
+    /// Gibt an, ob der User Pro-Subscriber ist
     @Published private(set) var isPremium: Bool = false
     
-    /// Gibt an, ob die Subscription gerade geladen wird
+    /// Gibt an, ob Daten geladen werden
     @Published private(set) var isLoading: Bool = false
     
     /// Aktueller Subscription-Typ
@@ -41,25 +49,32 @@ final class SubscriptionManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private let supabase = SupabaseManager.shared
     
+    // MARK: - Constants
+    
+    /// Anzahl der Credits, die neue User bekommen
+    static let initialCredits = 20
+    
     // MARK: - Initialization
     
     private init() {
-        setupSubscriptionObserver()
+        setupProfileObserver()
     }
     
     // MARK: - Setup
     
-    /// Beobachtet Änderungen am User-Profil und aktualisiert Premium-Status
-    private func setupSubscriptionObserver() {
+    /// Beobachtet Änderungen am User-Profil und aktualisiert Credits/Status
+    private func setupProfileObserver() {
         supabase.$userProfile
             .receive(on: DispatchQueue.main)
             .sink { [weak self] profile in
                 guard let self = self else { return }
                 
                 if let profile = profile {
+                    self.credits = profile.aiCreditsBalance
                     self.isPremium = profile.isPremium
                     self.subscriptionType = profile.isPremium ? .premium : .free
                 } else {
+                    self.credits = 0
                     self.isPremium = false
                     self.subscriptionType = .free
                 }
@@ -67,56 +82,85 @@ final class SubscriptionManager: ObservableObject {
             .store(in: &cancellables)
     }
     
-    // MARK: - Public Methods
+    // MARK: - Credits & Access Control
     
-    /// Prüft, ob ein Premium-Feature verfügbar ist
+    /// Prüft, ob der User genug Credits für eine KI-Generierung hat
+    var hasCredits: Bool {
+        credits > 0 || isPremium
+    }
+    
+    /// Prüft, ob ein Feature verfügbar ist
     /// - Parameter feature: Das zu prüfende Feature
     /// - Returns: `true` wenn das Feature verfügbar ist
     func canAccess(_ feature: PremiumFeature) -> Bool {
         switch feature {
         case .aiEmailGeneration:
-            return isPremium
+            // KI-Mails benötigen Credits ODER Premium
+            return hasCredits
         case .unlimitedLeads:
+            // Unbegrenzte Leads nur für Premium
             return isPremium
         case .cloudSync:
             // Cloud Sync ist für alle verfügbar (via iCloud)
             return true
         case .advancedExport:
+            // Erweiterter Export nur für Premium
             return isPremium
         }
     }
     
-    /// Lädt den Subscription-Status neu
-    func refreshSubscriptionStatus() async {
+    /// Formatierte Anzeige der Credits
+    var creditsDisplayText: String {
+        if isPremium {
+            return "∞"
+        }
+        return "\(credits)"
+    }
+    
+    /// Text für den Zauber-Mail Button
+    var aiButtonSubtitle: String {
+        if isPremium {
+            return "Unbegrenzt verfügbar"
+        } else if credits > 0 {
+            return "Noch \(credits)× verfügbar"
+        } else {
+            return "Keine Credits mehr"
+        }
+    }
+    
+    // MARK: - Refresh
+    
+    /// Lädt den Status neu
+    func refreshStatus() async {
         isLoading = true
         defer { isLoading = false }
         
-        await supabase.loadUserProfile()
+        await supabase.refreshProfile()
     }
     
-    /// Setzt den Premium-Status manuell (für Tests oder Supabase-Webhook)
-    /// - Parameter isPremium: Neuer Premium-Status
-    func setPremiumStatus(_ isPremium: Bool) {
-        self.isPremium = isPremium
-        self.subscriptionType = isPremium ? .premium : .free
+    // MARK: - In-App Purchase (Credit Packs)
+    
+    /// Kauft ein Credit-Paket
+    /// - Parameter pack: Das zu kaufende Paket
+    func purchaseCredits(pack: CreditPack) async throws {
+        isLoading = true
+        defer { isLoading = false }
+        
+        // TODO: StoreKit 2 Implementation für Credit-Packs
+        // 1. Produkt laden via StoreKit
+        // 2. Kauf durchführen
+        // 3. Receipt validieren (serverseitig)
+        // 4. Credits in profiles Tabelle hinzufügen
+        
+        throw SubscriptionError.notImplemented
     }
     
-    // MARK: - In-App Purchase (Placeholder)
-    
-    /// Startet den Kauf-Prozess für Premium
-    /// Hinweis: In der finalen Version StoreKit 2 implementieren
+    /// Kauft Pro-Subscription
     func purchasePremium() async throws {
         isLoading = true
         defer { isLoading = false }
         
-        // TODO: StoreKit 2 Implementation
-        // Für MVP: Simuliere erfolgreichen Kauf
-        
-        // In Production würde hier der echte IAP-Flow starten:
-        // 1. Produkt laden via StoreKit
-        // 2. Kauf durchführen
-        // 3. Receipt validieren (serverseitig über Supabase Edge Function)
-        // 4. Premium-Status in profiles Tabelle setzen
+        // TODO: StoreKit 2 Implementation für Subscription
         
         throw SubscriptionError.notImplemented
     }
@@ -128,13 +172,57 @@ final class SubscriptionManager: ObservableObject {
         
         // TODO: StoreKit 2 Restore Implementation
         
-        // Nach Restore: Profile neu laden um Status zu aktualisieren
-        await refreshSubscriptionStatus()
+        await refreshStatus()
     }
 }
 
 // ============================================
-// MARK: - Enums & Types
+// MARK: - Credit Packs
+// ============================================
+
+/// Verfügbare Credit-Pakete
+enum CreditPack: String, CaseIterable, Identifiable {
+    case small = "10 Credits"
+    case medium = "50 Credits"
+    case large = "200 Credits"
+    
+    var id: String { rawValue }
+    
+    var credits: Int {
+        switch self {
+        case .small: return 10
+        case .medium: return 50
+        case .large: return 200
+        }
+    }
+    
+    var price: String {
+        switch self {
+        case .small: return "2,99 €"
+        case .medium: return "9,99 €"
+        case .large: return "29,99 €"
+        }
+    }
+    
+    var savings: String? {
+        switch self {
+        case .small: return nil
+        case .medium: return "Spare 33%"
+        case .large: return "Spare 50%"
+        }
+    }
+    
+    var productId: String {
+        switch self {
+        case .small: return "com.messememo.credits.10"
+        case .medium: return "com.messememo.credits.50"
+        case .large: return "com.messememo.credits.200"
+        }
+    }
+}
+
+// ============================================
+// MARK: - Subscription Types
 // ============================================
 
 /// Subscription-Typen
@@ -157,7 +245,7 @@ enum SubscriptionType: String, CaseIterable {
     }
 }
 
-/// Premium-Features die gesperrt werden können
+/// Premium-Features
 enum PremiumFeature: String, CaseIterable {
     case aiEmailGeneration = "KI E-Mail Generierung"
     case unlimitedLeads = "Unbegrenzte Leads"
@@ -187,7 +275,10 @@ enum PremiumFeature: String, CaseIterable {
     }
 }
 
-/// Subscription-Fehler
+// ============================================
+// MARK: - Errors
+// ============================================
+
 enum SubscriptionError: Error, LocalizedError {
     case notImplemented
     case purchaseFailed
@@ -207,4 +298,3 @@ enum SubscriptionError: Error, LocalizedError {
         }
     }
 }
-
