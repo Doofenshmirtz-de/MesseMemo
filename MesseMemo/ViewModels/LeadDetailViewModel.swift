@@ -30,6 +30,11 @@ final class LeadDetailViewModel: ObservableObject {
     @Published var isTranscribing = false
     @Published var showTranscriptionSuccess = false
     
+    // AI Email Generation
+    @Published var isGeneratingEmail = false
+    @Published var showAIMailComposer = false
+    @Published var generatedAIEmail: GeneratedEmail?
+    
     // MARK: - Edit Mode Properties
     
     @Published var editName = ""
@@ -191,5 +196,52 @@ final class LeadDetailViewModel: ObservableObject {
     /// Prüft ob Mail-Composer verfügbar ist
     var canSendMail: Bool {
         MailComposerView.canSendMail
+    }
+    
+    // MARK: - AI Email Generation
+    
+    /// Generiert eine KI-basierte Follow-Up E-Mail
+    func generateAIEmail() async {
+        isGeneratingEmail = true
+        
+        // Haptic Feedback für Start
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+        
+        do {
+            // Prüfe Netzwerk-Verbindung implizit durch den Call
+            let email = try await SupabaseManager.shared.generateEmail(
+                name: lead.name,
+                company: lead.company,
+                transcript: lead.transcript ?? lead.notes,
+                leadId: nil
+            )
+            
+            generatedAIEmail = email
+            showAIMailComposer = true
+            
+            // Erfolgs-Feedback
+            let successGenerator = UINotificationFeedbackGenerator()
+            successGenerator.notificationOccurred(.success)
+            
+        } catch {
+            // Error-Feedback
+            let errorGenerator = UINotificationFeedbackGenerator()
+            errorGenerator.notificationOccurred(.error)
+            
+            // Benutzerfreundliche Fehlermeldung
+            if let supabaseError = error as? SupabaseError {
+                errorMessage = supabaseError.localizedDescription ?? "Ein Fehler ist aufgetreten."
+            } else if error.localizedDescription.lowercased().contains("network") ||
+                      error.localizedDescription.lowercased().contains("internet") ||
+                      error.localizedDescription.lowercased().contains("offline") {
+                errorMessage = "Keine Internetverbindung. KI-Funktionen benötigen eine aktive Verbindung."
+            } else {
+                errorMessage = "Die E-Mail konnte nicht generiert werden. Bitte versuche es später erneut."
+            }
+            showError = true
+        }
+        
+        isGeneratingEmail = false
     }
 }

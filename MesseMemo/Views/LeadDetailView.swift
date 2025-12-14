@@ -16,9 +16,15 @@ struct LeadDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     
+    // MARK: - Managers
+    
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
+    
     // MARK: - Properties
     
     @StateObject private var viewModel: LeadDetailViewModel
+    @State private var showPaywall = false
+    @State private var paywallTriggerFeature: PremiumFeature?
     
     // MARK: - Initialization
     
@@ -92,6 +98,18 @@ struct LeadDetailView: View {
                     recipients: mailData.recipients,
                     subject: mailData.subject,
                     body: mailData.body
+                )
+            }
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView(triggerFeature: paywallTriggerFeature)
+        }
+        .sheet(isPresented: $viewModel.showAIMailComposer) {
+            if viewModel.canSendMail, let aiMail = viewModel.generatedAIEmail {
+                MailComposerView(
+                    recipients: [viewModel.lead.email],
+                    subject: aiMail.subject,
+                    body: aiMail.body
                 )
             }
         }
@@ -337,13 +355,16 @@ struct LeadDetailView: View {
             }
             .disabled(viewModel.lead.name.isEmpty && viewModel.lead.company.isEmpty)
             
-            // Follow-Up Mail Button
+            // KI Follow-Up Mail Button (Premium Feature)
+            aiMailButton
+            
+            // Standard Follow-Up Mail Button
             if viewModel.canSendMail {
                 Button(action: { viewModel.showMailComposer = true }) {
                     HStack {
-                        Image(systemName: "envelope.badge")
-                            .foregroundStyle(.orange)
-                        Text("Follow-Up E-Mail senden")
+                        Image(systemName: "envelope")
+                            .foregroundStyle(.blue)
+                        Text("Einfache E-Mail senden")
                         Spacer()
                         Image(systemName: "arrow.up.right")
                             .font(.caption)
@@ -352,6 +373,79 @@ struct LeadDetailView: View {
                 }
             }
         }
+    }
+    
+    // MARK: - AI Mail Button (Premium)
+    
+    @ViewBuilder
+    private var aiMailButton: some View {
+        let canAccessAI = subscriptionManager.canAccess(.aiEmailGeneration)
+        
+        Button {
+            if canAccessAI {
+                // Premium User: Generiere KI-Mail
+                Task {
+                    await viewModel.generateAIEmail()
+                }
+            } else {
+                // Kein Premium: Zeige Paywall
+                paywallTriggerFeature = .aiEmailGeneration
+                showPaywall = true
+                
+                // Haptic Feedback
+                let impact = UIImpactFeedbackGenerator(style: .medium)
+                impact.impactOccurred()
+            }
+        } label: {
+            HStack {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(canAccessAI ? .purple : .secondary)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text("Zauber-Mail generieren")
+                            .foregroundStyle(canAccessAI ? .primary : .secondary)
+                        
+                        if !canAccessAI {
+                            Text("PRO")
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule()
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [.orange, .pink],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
+                                )
+                        }
+                    }
+                    
+                    if !canAccessAI {
+                        Text("KI-generierte Follow-up E-Mail")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                
+                Spacer()
+                
+                if viewModel.isGeneratingEmail {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                } else {
+                    Image(systemName: canAccessAI ? "arrow.up.right" : "lock.fill")
+                        .font(.caption)
+                        .foregroundColor(canAccessAI ? Color(.tertiaryLabel) : .orange)
+                }
+            }
+        }
+        .disabled(viewModel.isGeneratingEmail)
     }
     
     // MARK: - Actions Section

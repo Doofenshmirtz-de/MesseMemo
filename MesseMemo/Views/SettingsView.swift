@@ -12,10 +12,12 @@ struct SettingsView: View {
     
     @Environment(\.dismiss) private var dismiss
     @StateObject private var supabase = SupabaseManager.shared
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
     
     @State private var showLogoutAlert = false
     @State private var showDeleteAccountAlert = false
     @State private var isLoggingOut = false
+    @State private var showPaywall = false
     
     var body: some View {
         NavigationStack {
@@ -70,62 +72,118 @@ struct SettingsView: View {
     
     private var premiumSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("MesseMemo Pro")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Label("KI-generierte Follow-up Mails", systemImage: "sparkles")
-                            Label("Unbegrenzte Leads", systemImage: "infinity")
-                            Label("Cloud-Sync", systemImage: "icloud")
-                        }
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    }
+            if subscriptionManager.isPremium {
+                // User ist Premium
+                premiumActiveView
+            } else {
+                // User ist Free - zeige Upgrade Banner
+                premiumUpgradeView
+            }
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
+    }
+    
+    // MARK: - Premium Active View
+    
+    private var premiumActiveView: some View {
+        HStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [.yellow, .orange],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 50, height: 50)
+                
+                Image(systemName: "crown.fill")
+                    .font(.title2)
+                    .foregroundStyle(.white)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("MesseMemo Pro")
+                    .font(.headline)
+                
+                Text("Alle Premium-Features aktiv")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Spacer()
+            
+            Image(systemName: "checkmark.seal.fill")
+                .font(.title2)
+                .foregroundStyle(.green)
+        }
+        .padding(.vertical, 4)
+    }
+    
+    // MARK: - Premium Upgrade View
+    
+    private var premiumUpgradeView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("MesseMemo Pro")
+                        .font(.title2)
+                        .fontWeight(.bold)
                     
-                    Spacer()
-                    
-                    // Decorative circles
-                    ZStack {
-                        Circle()
-                            .fill(.blue.opacity(0.3))
-                            .frame(width: 50, height: 50)
-                            .offset(x: 10, y: -10)
-                        
-                        Circle()
-                            .fill(.purple.opacity(0.3))
-                            .frame(width: 40, height: 40)
-                            .offset(x: -15, y: 15)
-                        
-                        Image(systemName: "crown.fill")
-                            .font(.title)
-                            .foregroundStyle(.yellow)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("KI-generierte Follow-up Mails", systemImage: "sparkles")
+                        Label("Unbegrenzte Leads", systemImage: "infinity")
+                        Label("Cloud-Sync", systemImage: "icloud")
                     }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                 }
                 
-                Button {
-                    // TODO: In-App Purchase
-                } label: {
-                    Text("Jetzt upgraden")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(
-                            LinearGradient(
-                                colors: [.blue, .purple],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                Spacer()
+                
+                // Decorative circles
+                ZStack {
+                    Circle()
+                        .fill(.blue.opacity(0.3))
+                        .frame(width: 50, height: 50)
+                        .offset(x: 10, y: -10)
+                    
+                    Circle()
+                        .fill(.purple.opacity(0.3))
+                        .frame(width: 40, height: 40)
+                        .offset(x: -15, y: 15)
+                    
+                    Image(systemName: "crown.fill")
+                        .font(.title)
+                        .foregroundStyle(.yellow)
                 }
             }
-            .padding(.vertical, 8)
+            
+            Button {
+                showPaywall = true
+                // Haptic Feedback
+                let impact = UIImpactFeedbackGenerator(style: .medium)
+                impact.impactOccurred()
+            } label: {
+                Text("Jetzt upgraden")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        LinearGradient(
+                            colors: [.blue, .purple],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
         }
+        .padding(.vertical, 8)
     }
     
     // MARK: - Account Section
