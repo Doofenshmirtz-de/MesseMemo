@@ -1,6 +1,6 @@
 // ============================================
 // MesseMemo AI Email Generation Edge Function
-// Version: 2.0 (mit Credit-System)
+// Version: 3.0 (Google Gemini 1.5 Flash)
 // ============================================
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -12,9 +12,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// OpenAI Configuration
-const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-const OPENAI_MODEL = "gpt-4o-mini";
+// Google Gemini Configuration
+const GOOGLE_API_KEY = Deno.env.get("GOOGLE_API_KEY");
+const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 // ============================================
 // Main Handler
@@ -100,55 +101,67 @@ serve(async (req) => {
     }
 
     // ========================================
-    // 4. OpenAI API Call
+    // 4. Google Gemini API Call
     // ========================================
     
-    if (!OPENAI_API_KEY) {
+    if (!GOOGLE_API_KEY) {
       // Credit zurückgeben bei Konfigurationsfehler
       await supabaseAdmin.rpc("add_ai_credits", { 
         user_id: user.id, 
         amount: 1 
       });
-      return errorResponse(500, "OpenAI API nicht konfiguriert");
+      return errorResponse(500, "Google API nicht konfiguriert");
     }
 
-    const prompt = buildPrompt(name, company, transcript);
+    const prompt = buildGeminiPrompt(name, company, transcript);
 
-    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+    const geminiResponse = await fetch(`${GEMINI_ENDPOINT}?key=${GOOGLE_API_KEY}`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: OPENAI_MODEL,
-        messages: [
+        contents: [
           {
-            role: "system",
-            content: `Du bist ein professioneller Business-Kommunikationsexperte. 
-Deine Aufgabe ist es, freundliche, professionelle Follow-up E-Mails auf Deutsch zu verfassen.
-Die E-Mails sollten:
-- Kurz und prägnant sein (max. 150 Wörter)
-- Einen klaren Betreff haben
-- Persönlich wirken, aber professionell bleiben
-- Einen konkreten Call-to-Action enthalten
-- Das Format sein: BETREFF: [Betreff]\n\n[E-Mail-Text]`,
-          },
-          {
-            role: "user",
-            content: prompt,
-          },
+            parts: [
+              {
+                text: prompt
+              }
+            ]
+          }
         ],
-        temperature: 0.7,
-        max_tokens: 500,
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 500,
+          topP: 0.9,
+          topK: 40
+        },
+        safetySettings: [
+          {
+            category: "HARM_CATEGORY_HARASSMENT",
+            threshold: "BLOCK_NONE"
+          },
+          {
+            category: "HARM_CATEGORY_HATE_SPEECH",
+            threshold: "BLOCK_NONE"
+          },
+          {
+            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            threshold: "BLOCK_NONE"
+          },
+          {
+            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+            threshold: "BLOCK_NONE"
+          }
+        ]
       }),
     });
 
-    if (!openaiResponse.ok) {
-      const errorData = await openaiResponse.text();
-      console.error("OpenAI Error:", errorData);
+    if (!geminiResponse.ok) {
+      const errorData = await geminiResponse.text();
+      console.error("Gemini Error:", errorData);
       
-      // Credit zurückgeben bei OpenAI Fehler
+      // Credit zurückgeben bei Gemini Fehler
       await supabaseAdmin.rpc("add_ai_credits", { 
         user_id: user.id, 
         amount: 1 
@@ -157,8 +170,22 @@ Die E-Mails sollten:
       return errorResponse(500, "KI-Generierung fehlgeschlagen");
     }
 
-    const openaiData = await openaiResponse.json();
-    const generatedText = openaiData.choices?.[0]?.message?.content || "";
+    const geminiData = await geminiResponse.json();
+    
+    // Gemini Response Format: candidates[0].content.parts[0].text
+    const generatedText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    if (!generatedText) {
+      console.error("Empty Gemini response:", JSON.stringify(geminiData));
+      
+      // Credit zurückgeben bei leerem Response
+      await supabaseAdmin.rpc("add_ai_credits", { 
+        user_id: user.id, 
+        amount: 1 
+      });
+      
+      return errorResponse(500, "Keine Antwort von der KI erhalten");
+    }
 
     // ========================================
     // 5. Response parsen
@@ -220,9 +247,37 @@ function errorResponse(
   );
 }
 
-function buildPrompt(name: string, company: string, transcript: string): string {
-  let prompt = "Erstelle eine Follow-up E-Mail für folgenden Kontakt:\n\n";
-  
+/**
+ * Baut den Prompt für Gemini 1.5 Flash
+ * System-Instruktion ist direkt im Prompt enthalten
+ */
+function buildGeminiPrompt(name: string, company: string, transcript: string): string {
+  // System-Instruktion direkt am Anfang
+  let prompt = `Du bist ein professioneller Business-Kommunikationsexperte, der freundliche, professionelle Follow-up E-Mails auf Deutsch verfasst.
+
+WICHTIGE REGELN:
+- Die E-Mail muss kurz und prägnant sein (max. 150 Wörter)
+- Schreibe einen klaren, professionellen Betreff
+- Die E-Mail soll persönlich wirken, aber professionell bleiben
+- Füge einen konkreten Call-to-Action hinzu
+- WICHTIG: Beginne IMMER mit "BETREFF:" gefolgt vom Betreff, dann eine Leerzeile, dann der E-Mail-Text
+
+BEISPIEL-FORMAT:
+BETREFF: Schön Sie kennengelernt zu haben
+
+Sehr geehrte/r [Name],
+
+[E-Mail-Text hier]
+
+Mit freundlichen Grüßen
+[Absender]
+
+---
+
+AUFGABE: Erstelle eine Follow-up E-Mail für folgenden Kontakt:
+
+`;
+
   if (name) {
     prompt += `Name: ${name}\n`;
   }
@@ -233,33 +288,59 @@ function buildPrompt(name: string, company: string, transcript: string): string 
     prompt += `\nKontext aus dem Gespräch:\n${transcript}\n`;
   }
   
-  prompt += "\nBitte erstelle eine professionelle, freundliche Follow-up E-Mail.";
+  prompt += "\nBitte erstelle jetzt die professionelle Follow-up E-Mail im oben beschriebenen Format.";
   
   return prompt;
 }
 
+/**
+ * Parst die generierte E-Mail in Betreff und Body
+ */
 function parseEmailResponse(text: string): { subject: string; body: string } {
+  // Bereinige den Text
+  const cleanText = text.trim();
+  
   // Versuche "BETREFF:" Format zu parsen
-  const betreffMatch = text.match(/BETREFF:\s*(.+?)(?:\n|$)/i);
+  const betreffMatch = cleanText.match(/BETREFF:\s*(.+?)(?:\n|$)/i);
   
   if (betreffMatch) {
     const subject = betreffMatch[1].trim();
-    const body = text.replace(/BETREFF:\s*.+?\n+/i, "").trim();
-    return { subject, body };
+    // Entferne den Betreff-Teil und führende Leerzeilen
+    const body = cleanText
+      .replace(/BETREFF:\s*.+?\n+/i, "")
+      .trim();
+    
+    if (subject && body) {
+      return { subject, body };
+    }
   }
   
-  // Fallback: Erste Zeile als Betreff
-  const lines = text.split("\n").filter(l => l.trim());
+  // Fallback: Suche nach "Betreff:" ohne Großbuchstaben
+  const altMatch = cleanText.match(/(?:Betreff|Subject):\s*(.+?)(?:\n|$)/i);
+  
+  if (altMatch) {
+    const subject = altMatch[1].trim();
+    const body = cleanText
+      .replace(/(?:Betreff|Subject):\s*.+?\n+/i, "")
+      .trim();
+    
+    if (subject && body) {
+      return { subject, body };
+    }
+  }
+  
+  // Letzter Fallback: Erste Zeile als Betreff
+  const lines = cleanText.split("\n").filter(l => l.trim());
   if (lines.length >= 2) {
     return {
-      subject: lines[0].replace(/^(Betreff|Subject):\s*/i, "").trim(),
+      subject: lines[0].replace(/^[*#\-]+\s*/, "").trim(),
       body: lines.slice(1).join("\n").trim(),
     };
   }
   
-  // Letzter Fallback
+  // Absoluter Fallback
   return {
     subject: "Follow-up zu unserem Gespräch",
-    body: text.trim(),
+    body: cleanText,
   };
 }
