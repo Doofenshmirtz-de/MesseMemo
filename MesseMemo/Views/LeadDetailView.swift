@@ -246,13 +246,11 @@ struct LeadDetailView: View {
                     Spacer()
                     
                     if viewModel.audioService.isPlaying {
-                        // Waveform Animation
-                        HStack(spacing: 2) {
-                            ForEach(0..<5, id: \.self) { index in
-                                WaveformBar(index: index)
-                            }
-                        }
-                        .frame(width: 30, height: 20)
+                        // Playing Indicator
+                        Image(systemName: "speaker.wave.2.fill")
+                            .font(.body)
+                            .foregroundStyle(Color.accentColor)
+                            .symbolEffect(.variableColor.iterative)
                     }
                 }
                 .padding(.vertical, 4)
@@ -402,28 +400,6 @@ struct LeadDetailView: View {
                 }
             }
         }
-    }
-}
-
-// MARK: - Waveform Animation
-
-struct WaveformBar: View {
-    let index: Int
-    @State private var animating = false
-    
-    var body: some View {
-        RoundedRectangle(cornerRadius: 1)
-            .fill(Color.accentColor)
-            .frame(width: 3, height: animating ? CGFloat.random(in: 5...20) : 5)
-            .animation(
-                .easeInOut(duration: 0.3)
-                .repeatForever(autoreverses: true)
-                .delay(Double(index) * 0.1),
-                value: animating
-            )
-            .onAppear {
-                animating = true
-            }
     }
 }
 

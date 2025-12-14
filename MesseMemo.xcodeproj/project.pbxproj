@@ -6,13 +6,35 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		F51FD9402EEE3A7000BE68B1 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = F51FD93F2EEE3A7000BE68B1 /* Auth */; };
+		F51FD9422EEE3A7000BE68B1 /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = F51FD9412EEE3A7000BE68B1 /* Functions */; };
+		F51FD9442EEE3A7000BE68B1 /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = F51FD9432EEE3A7000BE68B1 /* PostgREST */; };
+		F51FD9462EEE3A7000BE68B1 /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = F51FD9452EEE3A7000BE68B1 /* Realtime */; };
+		F51FD9482EEE3A7000BE68B1 /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = F51FD9472EEE3A7000BE68B1 /* Storage */; };
+		F51FD9752EEE3B8300BE68B1 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = F51FD9742EEE3B8300BE68B1 /* Supabase */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		F55F3FB92EE9E62200A70AAB /* MesseMemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MesseMemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		F51FD9772EEE3F9C00BE68B1 /* Exceptions for "MesseMemo" folder in "MesseMemo" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = F55F3FB82EE9E62200A70AAB /* MesseMemo */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		F55F3FBB2EE9E62200A70AAB /* MesseMemo */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				F51FD9772EEE3F9C00BE68B1 /* Exceptions for "MesseMemo" folder in "MesseMemo" target */,
+			);
 			path = MesseMemo;
 			sourceTree = "<group>";
 		};
@@ -23,16 +45,30 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F51FD9442EEE3A7000BE68B1 /* PostgREST in Frameworks */,
+				F51FD9422EEE3A7000BE68B1 /* Functions in Frameworks */,
+				F51FD9752EEE3B8300BE68B1 /* Supabase in Frameworks */,
+				F51FD9402EEE3A7000BE68B1 /* Auth in Frameworks */,
+				F51FD9482EEE3A7000BE68B1 /* Storage in Frameworks */,
+				F51FD9462EEE3A7000BE68B1 /* Realtime in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		F51FD9732EEE3B8200BE68B1 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		F55F3FB02EE9E62200A70AAB = {
 			isa = PBXGroup;
 			children = (
 				F55F3FBB2EE9E62200A70AAB /* MesseMemo */,
+				F51FD9732EEE3B8200BE68B1 /* Frameworks */,
 				F55F3FBA2EE9E62200A70AAB /* Products */,
 			);
 			sourceTree = "<group>";
@@ -65,6 +101,12 @@
 			);
 			name = MesseMemo;
 			packageProductDependencies = (
+				F51FD93F2EEE3A7000BE68B1 /* Auth */,
+				F51FD9412EEE3A7000BE68B1 /* Functions */,
+				F51FD9432EEE3A7000BE68B1 /* PostgREST */,
+				F51FD9452EEE3A7000BE68B1 /* Realtime */,
+				F51FD9472EEE3A7000BE68B1 /* Storage */,
+				F51FD9742EEE3B8300BE68B1 /* Supabase */,
 			);
 			productName = MesseMemo;
 			productReference = F55F3FB92EE9E62200A70AAB /* MesseMemo.app */;
@@ -94,6 +136,9 @@
 			);
 			mainGroup = F55F3FB02EE9E62200A70AAB;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				F51FD93E2EEE3A7000BE68B1 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F55F3FBA2EE9E62200A70AAB /* Products */;
 			projectDirPath = "";
@@ -251,11 +296,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MesseMemo/MesseMemo.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 7A68MD8M9H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MesseMemo/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "MesseMemo benötigt Zugriff auf die Kamera, um Visitenkarten zu scannen und Kontaktdaten automatisch zu erfassen.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "MesseMemo benötigt Zugriff auf das Mikrofon, um Sprachnotizen zu Ihren Kontakten aufzunehmen.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "MesseMemo benötigt Spracherkennung um Notizen zu transkribieren.";
@@ -286,11 +333,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MesseMemo/MesseMemo.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 7A68MD8M9H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MesseMemo/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "MesseMemo benötigt Zugriff auf die Kamera, um Visitenkarten zu scannen und Kontaktdaten automatisch zu erfassen.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "MesseMemo benötigt Zugriff auf das Mikrofon, um Sprachnotizen zu Ihren Kontakten aufzunehmen.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "MesseMemo benötigt Spracherkennung um Notizen zu transkribieren.";
@@ -338,6 +387,50 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		F51FD93E2EEE3A7000BE68B1 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		F51FD93F2EEE3A7000BE68B1 /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F51FD93E2EEE3A7000BE68B1 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
+		};
+		F51FD9412EEE3A7000BE68B1 /* Functions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F51FD93E2EEE3A7000BE68B1 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Functions;
+		};
+		F51FD9432EEE3A7000BE68B1 /* PostgREST */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F51FD93E2EEE3A7000BE68B1 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = PostgREST;
+		};
+		F51FD9452EEE3A7000BE68B1 /* Realtime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F51FD93E2EEE3A7000BE68B1 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Realtime;
+		};
+		F51FD9472EEE3A7000BE68B1 /* Storage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F51FD93E2EEE3A7000BE68B1 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Storage;
+		};
+		F51FD9742EEE3B8300BE68B1 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F51FD93E2EEE3A7000BE68B1 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = F55F3FB12EE9E62200A70AAB /* Project object */;
 }

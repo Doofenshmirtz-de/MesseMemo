@@ -8,7 +8,7 @@
 import SwiftUI
 import AVFoundation
 
-/// View für die Audio-Aufnahme und -Wiedergabe
+/// WhatsApp-ähnliche View für die Audio-Aufnahme und -Wiedergabe
 struct AudioRecorderView: View {
     
     // MARK: - Properties
@@ -28,11 +28,11 @@ struct AudioRecorderView: View {
     
     var body: some View {
         VStack(spacing: 12) {
-            if audioFilePath != nil {
+            if audioFilePath != nil && !audioService.isRecording {
                 // Aufnahme vorhanden - Wiedergabe-UI
                 playbackView
             } else if audioService.isRecording {
-                // Aufnahme läuft
+                // Aufnahme läuft - WhatsApp-Style
                 recordingView
             } else {
                 // Keine Aufnahme - Start-UI
@@ -45,22 +45,43 @@ struct AudioRecorderView: View {
     
     private var startRecordingView: some View {
         Button(action: startRecording) {
-            HStack {
-                Image(systemName: "mic.circle.fill")
-                    .font(.title)
-                    .foregroundStyle(.red)
+            HStack(spacing: 16) {
+                // Mikrofon-Icon mit Hintergrund
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.red, .red.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 50, height: 50)
+                        .shadow(color: .red.opacity(0.3), radius: 8, x: 0, y: 4)
+                    
+                    Image(systemName: "mic.fill")
+                        .font(.title2)
+                        .foregroundStyle(.white)
+                }
                 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Sprachnotiz aufnehmen")
                         .font(.subheadline)
-                        .fontWeight(.medium)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.primary)
+                    
                     Text("Tippen zum Starten")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 
                 Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
+            .padding(.vertical, 4)
         }
         .buttonStyle(.plain)
         .disabled(!audioService.permissionGranted)
@@ -71,118 +92,144 @@ struct AudioRecorderView: View {
         }
     }
     
-    // MARK: - Recording View
+    // MARK: - Recording View (WhatsApp-Style)
     
     private var recordingView: some View {
-        HStack {
-            // Pulsierende Aufnahme-Anzeige
-            ZStack {
-                Circle()
-                    .fill(.red.opacity(0.3))
-                    .frame(width: 50, height: 50)
-                    .scaleEffect(1.2)
-                    .animation(
-                        .easeInOut(duration: 0.8)
-                        .repeatForever(autoreverses: true),
-                        value: audioService.isRecording
-                    )
-                
+        VStack(spacing: 16) {
+            // Timer und Status
+            HStack {
+                // Pulsierender roter Punkt
                 Circle()
                     .fill(.red)
-                    .frame(width: 20, height: 20)
-            }
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Aufnahme läuft...")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .frame(width: 12, height: 12)
+                    .overlay(
+                        Circle()
+                            .stroke(.red.opacity(0.5), lineWidth: 2)
+                            .scaleEffect(1.5)
+                            .opacity(0.8)
+                    )
+                    .modifier(PulseAnimation())
+                
+                // Live Timer
+                Text(AudioService.formatTime(audioService.recordingTime))
+                    .font(.system(size: 32, weight: .medium, design: .monospaced))
                     .foregroundStyle(.red)
                 
-                Text(AudioService.formatTime(audioService.recordingTime))
-                    .font(.caption)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                Spacer()
+                
+                // Stop Button
+                Button(action: stopRecording) {
+                    ZStack {
+                        Circle()
+                            .fill(.red)
+                            .frame(width: 56, height: 56)
+                            .shadow(color: .red.opacity(0.4), radius: 8, x: 0, y: 4)
+                        
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(.white)
+                            .frame(width: 20, height: 20)
+                    }
+                }
+                .buttonStyle(.plain)
             }
+            .padding(.horizontal, 4)
             
-            Spacer()
-            
-            Button(action: stopRecording) {
-                Image(systemName: "stop.circle.fill")
-                    .font(.title)
-                    .foregroundStyle(.red)
-            }
-            .buttonStyle(.plain)
+            // Hinweis
+            Text("Tippe auf Stop um die Aufnahme zu beenden")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
+        .onAppear {
+            playStartSound()
+        }
     }
     
     // MARK: - Playback View
     
     private var playbackView: some View {
-        HStack {
-            // Play/Stop Button
-            Button(action: togglePlayback) {
-                Image(systemName: audioService.isPlaying ? "stop.circle.fill" : "play.circle.fill")
-                    .font(.title)
-                    .foregroundStyle(Color.accentColor)
-            }
-            .buttonStyle(.plain)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Sprachnotiz")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                
-                if audioService.isPlaying {
-                    // Fortschrittsanzeige
-                    ProgressView(
-                        value: audioService.playbackTime,
-                        total: max(audioService.playbackDuration, 1)
-                    )
-                    .tint(Color.accentColor)
-                    
-                    Text("\(AudioService.formatTime(audioService.playbackTime)) / \(AudioService.formatTime(audioService.playbackDuration))")
-                        .font(.caption2)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text(formattedDuration)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            
-            Spacer()
-            
-            // Waveform Animation
-            if audioService.isPlaying {
-                HStack(spacing: 2) {
-                    ForEach(0..<4, id: \.self) { index in
-                        MiniWaveformBar(index: index)
+        VStack(spacing: 12) {
+            HStack {
+                // Play/Pause Button
+                Button(action: togglePlayback) {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.accentColor, Color.accentColor.opacity(0.8)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 50, height: 50)
+                            .shadow(color: Color.accentColor.opacity(0.3), radius: 6, x: 0, y: 3)
+                        
+                        Image(systemName: audioService.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.title3)
+                            .foregroundStyle(.white)
+                            .offset(x: audioService.isPlaying ? 0 : 2)
                     }
                 }
-                .frame(width: 24, height: 16)
-            }
-            
-            // Löschen Button
-            Button(action: { showDeleteConfirmation = true }) {
-                Image(systemName: "trash")
-                    .font(.body)
-                    .foregroundStyle(.red)
-            }
-            .buttonStyle(.plain)
-            .confirmationDialog(
-                "Sprachnotiz löschen?",
-                isPresented: $showDeleteConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Löschen", role: .destructive) {
-                    deleteRecording()
+                .buttonStyle(.plain)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    // Progress Bar
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            // Hintergrund
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.secondary.opacity(0.2))
+                                .frame(height: 4)
+                            
+                            // Fortschritt
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.accentColor)
+                                .frame(
+                                    width: geometry.size.width * progressPercentage,
+                                    height: 4
+                                )
+                        }
+                    }
+                    .frame(height: 4)
+                    
+                    // Zeit-Anzeige
+                    HStack {
+                        Text(AudioService.formatTime(audioService.isPlaying ? audioService.playbackTime : 0))
+                            .font(.caption2)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                        
+                        Spacer()
+                        
+                        Text(formattedDuration)
+                            .font(.caption2)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                Button("Abbrechen", role: .cancel) { }
+                
+                // Löschen Button
+                Button(action: { showDeleteConfirmation = true }) {
+                    Image(systemName: "trash.fill")
+                        .font(.body)
+                        .foregroundStyle(.red.opacity(0.8))
+                        .padding(8)
+                        .background(Circle().fill(.red.opacity(0.1)))
+                }
+                .buttonStyle(.plain)
+                .confirmationDialog(
+                    "Sprachnotiz löschen?",
+                    isPresented: $showDeleteConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Löschen", role: .destructive) {
+                        deleteRecording()
+                    }
+                    Button("Abbrechen", role: .cancel) { }
+                }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
     }
     
     // MARK: - Permission Hint
@@ -193,9 +240,16 @@ struct AudioRecorderView: View {
             HStack {
                 Spacer()
                 Button(action: openSettings) {
-                    Text("Mikrofon-Zugriff erforderlich")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption2)
+                        Text("Mikrofon-Zugriff erforderlich")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(.orange.opacity(0.15)))
                 }
             }
         }
@@ -206,9 +260,25 @@ struct AudioRecorderView: View {
     private var formattedDuration: String {
         guard let path = audioFilePath,
               let duration = audioService.getDuration(for: path) else {
-            return "Unbekannte Dauer"
+            return "0:00"
         }
-        return "Dauer: \(AudioService.formatTime(duration))"
+        return AudioService.formatTime(duration)
+    }
+    
+    private var progressPercentage: CGFloat {
+        guard audioService.playbackDuration > 0 else { return 0 }
+        return CGFloat(audioService.playbackTime / audioService.playbackDuration)
+    }
+    
+    // MARK: - Sound Effects
+    
+    private func playStartSound() {
+        // System Sound für Aufnahmestart
+        AudioServicesPlaySystemSound(1113) // Aufnahme-Start-Sound
+    }
+    
+    private func playStopSound() {
+        AudioServicesPlaySystemSound(1114) // Aufnahme-Stop-Sound
     }
     
     // MARK: - Actions
@@ -218,6 +288,7 @@ struct AudioRecorderView: View {
     }
     
     private func stopRecording() {
+        playStopSound()
         onStopRecording()
     }
     
@@ -243,31 +314,29 @@ struct AudioRecorderView: View {
     }
 }
 
-// MARK: - Mini Waveform Bar
+// MARK: - Pulse Animation Modifier
 
-struct MiniWaveformBar: View {
-    let index: Int
-    @State private var animating = false
+struct PulseAnimation: ViewModifier {
+    @State private var isPulsing = false
     
-    var body: some View {
-        RoundedRectangle(cornerRadius: 1)
-            .fill(Color.accentColor)
-            .frame(width: 3, height: animating ? CGFloat.random(in: 4...16) : 4)
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isPulsing ? 1.2 : 1.0)
+            .opacity(isPulsing ? 0.7 : 1.0)
             .animation(
-                .easeInOut(duration: 0.25)
-                .repeatForever(autoreverses: true)
-                .delay(Double(index) * 0.08),
-                value: animating
+                .easeInOut(duration: 0.6)
+                .repeatForever(autoreverses: true),
+                value: isPulsing
             )
             .onAppear {
-                animating = true
+                isPulsing = true
             }
     }
 }
 
 // MARK: - Preview
 
-#Preview {
+#Preview("Idle State") {
     Form {
         Section("Sprachnotiz") {
             AudioRecorderView(
@@ -282,3 +351,17 @@ struct MiniWaveformBar: View {
     }
 }
 
+#Preview("With Recording") {
+    Form {
+        Section("Sprachnotiz") {
+            AudioRecorderView(
+                audioService: AudioService(),
+                audioFilePath: .constant("test.m4a"),
+                leadId: UUID(),
+                onStartRecording: { },
+                onStopRecording: { },
+                onDeleteRecording: { }
+            )
+        }
+    }
+}

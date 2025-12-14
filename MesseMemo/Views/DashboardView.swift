@@ -20,6 +20,7 @@ struct DashboardView: View {
     
     @StateObject private var viewModel = LeadsViewModel()
     @State private var showNewLead = false
+    @State private var showSettings = false
     
     // MARK: - Body
     
@@ -39,6 +40,9 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showNewLead) {
                 NewLeadView()
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
             }
             .sheet(isPresented: $viewModel.showExportSheet) {
                 if let url = viewModel.exportURL {
@@ -90,9 +94,16 @@ struct DashboardView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .navigationBarTrailing) {
-            Button(action: { showNewLead = true }) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.title2)
+            HStack(spacing: 16) {
+                Button(action: { showNewLead = true }) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                }
+                
+                Button(action: { showSettings = true }) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.title3)
+                }
             }
         }
         

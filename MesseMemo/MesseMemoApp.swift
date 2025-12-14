@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import Supabase
 
 @main
 struct MesseMemoApp: App {
@@ -33,8 +34,24 @@ struct MesseMemoApp: App {
     
     var body: some Scene {
         WindowGroup {
-            DashboardView()
+            RootView()
+                .onOpenURL { url in
+                    Task {
+                        await handleAuthCallback(url: url)
+                    }
+                }
         }
         .modelContainer(sharedModelContainer)
+    }
+    
+    // MARK: - Deep Link Handler
+    
+    private func handleAuthCallback(url: URL) async {
+        do {
+            try await SupabaseManager.shared.client.auth.session(from: url)
+            await SupabaseManager.shared.checkAuthState()
+        } catch {
+            print("Auth callback error: \(error)")
+        }
     }
 }

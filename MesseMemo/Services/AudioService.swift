@@ -215,7 +215,8 @@ final class AudioService: NSObject, ObservableObject {
         // Audio Session für Wiedergabe konfigurieren
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playback, mode: .default, options: [.defaultToSpeaker])
+            // Verwende playAndRecord mit defaultToSpeaker für laute Wiedergabe
+            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
             print("AudioService: Fehler beim Aktivieren der Playback-Session: \(error.localizedDescription)")
