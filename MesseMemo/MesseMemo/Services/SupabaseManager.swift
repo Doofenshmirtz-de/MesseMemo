@@ -218,6 +218,91 @@ final class SupabaseManager: ObservableObject {
     }
     
     // ============================================
+    // MARK: - Auth Provider Detection
+    // ============================================
+    
+    /// Prüft ob der User mit Apple Sign In eingeloggt ist
+    /// Wichtig für UI-Hinweise bzgl. CloudKit-Sync vs. lokale Daten
+    var isAppleLogin: Bool {
+        // Versuche den Provider aus der aktuellen Session zu lesen
+        guard let userId = currentUserId else { return false }
+        
+        // Methode 1: App Metadata prüfen (wenn verfügbar)
+        // Die Session speichert den Provider in user.appMetadata
+        Task {
+            do {
+                let session = try await client.auth.session
+                if let provider = session.user.appMetadata["provider"]?.value as? String {
+                    return provider.lowercased() == "apple"
+                }
+                // Fallback: Identities prüfen
+                if let identities = session.user.identities {
+                    return identities.contains { $0.provider.lowercased() == "apple" }
+                }
+            } catch {
+                // Session nicht verfügbar
+            }
+            return false
+        }
+        
+        // Synchroner Fallback: E-Mail-Adresse prüfen
+        // Apple Private Relay E-Mails enden auf @privaterelay.appleid.com
+        if let email = userProfile?.email {
+            if email.contains("@privaterelay.appleid.com") {
+                return true
+            }
+            // Normale E-Mail = wahrscheinlich Email-Login
+            return false
+        }
+        
+        // Keine E-Mail = könnte Apple Login mit versteckter E-Mail sein
+        return false
+    }
+    
+    /// Auth-Provider des aktuellen Users (async, da Session-Zugriff)
+    @MainActor
+    func getAuthProvider() async -> AuthProvider {
+        guard isAuthenticated else { return .unknown }
+        
+        do {
+            let session = try await client.auth.session
+            
+            // Prüfe app_metadata für Provider
+            if let providerValue = session.user.appMetadata["provider"] {
+                // AnyJSON zu String konvertieren
+                let providerString = String(describing: providerValue).lowercased()
+                if providerString.contains("apple") {
+                    return .apple
+                } else if providerString.contains("email") || providerString.contains("password") {
+                    return .email
+                }
+            }
+            
+            // Fallback: Identities prüfen
+            if let identities = session.user.identities {
+                for identity in identities {
+                    if identity.provider.lowercased() == "apple" {
+                        return .apple
+                    }
+                }
+            }
+            
+            // Fallback: E-Mail-Muster prüfen
+            if let email = session.user.email {
+                if email.contains("@privaterelay.appleid.com") {
+                    return .apple
+                }
+            }
+            
+            // Standard: Email-Login (wenn keine Apple-Indikatoren gefunden)
+            return .email
+            
+        } catch {
+            return .unknown
+        }
+    }
+    
+    // ============================================
     // MARK: - AI Email Generation (Edge Function)
     // ============================================
     
@@ -382,6 +467,31 @@ enum SupabaseError: Error, LocalizedError {
             return "E-Mail konnte nicht generiert werden: \(reason)"
         case .networkError:
             return "Keine Internetverbindung."
+        }
+    }
+}
+
+// ============================================
+// MARK: - Auth Provider Enum
+// ============================================
+
+/// Auth-Provider Typen
+enum AuthProvider {
+    case apple      // Sign in with Apple
+    case email      // Email/Password Login
+    case unknown    // Nicht bestimmbar
+    
+    /// Ob CloudKit-Sync verfügbar ist (nur mit Apple ID)
+    var hasCloudSync: Bool {
+        self == .apple
+    }
+    
+    /// Benutzerfreundlicher Name
+    var displayName: String {
+        switch self {
+        case .apple: return "Apple ID"
+        case .email: return "E-Mail"
+        case .unknown: return "Unbekannt"
         }
     }
 }

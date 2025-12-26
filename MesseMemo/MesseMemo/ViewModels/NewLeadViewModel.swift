@@ -59,17 +59,23 @@ final class NewLeadViewModel: ObservableObject {
         qrCodeURL = nil
         
         do {
-            // 1. Originalbild speichern (für Fallback bei OCR-Fehlern)
+            // 0. Bild auf Bildschirm-Seitenverhältnis zuschneiden (Center Crop)
+            // Löst das "Zoom-Effekt" Problem: Kamera-Vorschau nutzt resizeAspectFill,
+            // aber das Foto ist das volle 4:3 Sensorbild. Durch Cropping wird
+            // "What you see is what you get" erreicht, was die OCR-Ergebnisse verbessert.
+            let croppedImage = image.cropToScreenAspectRatio()
+            
+            // 1. Gecropptes Bild speichern (für Fallback bei OCR-Fehlern)
             do {
-                let filename = try imageStorageService.saveImage(image, for: leadId)
+                let filename = try imageStorageService.saveImage(croppedImage, for: leadId)
                 originalImageFilename = filename
             } catch {
                 print("NewLeadViewModel: Warnung - Bild konnte nicht gespeichert werden: \(error.localizedDescription)")
             }
             
-            // 2. Parallel: OCR und QR-Code-Erkennung starten
-            async let ocrTask = ocrService.recognizeText(from: image)
-            async let qrTask = ocrService.extractQRCode(from: image)
+            // 2. Parallel: OCR und QR-Code-Erkennung mit gecropptem Bild starten
+            async let ocrTask = ocrService.recognizeText(from: croppedImage)
+            async let qrTask = ocrService.extractQRCode(from: croppedImage)
             
             let (recognizedLines, qrContent) = try await (ocrTask, qrTask)
             
@@ -85,6 +91,11 @@ final class NewLeadViewModel: ObservableObject {
             // QR-Code-Daten parsen (falls vorhanden)
             if let content = qrContent {
                 qrCodeDetected = true
+                
+                // Sofortiges haptisches Feedback bei QR-Code-Erkennung
+                // Gibt dem Nutzer Sicherheit, dass der Code erkannt wurde
+                let qrFeedback = UINotificationFeedbackGenerator()
+                qrFeedback.notificationOccurred(.success)
                 
                 if ocrService.isVCard(content) {
                     // vCard parsen

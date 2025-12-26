@@ -18,6 +18,7 @@ struct SettingsView: View {
     @State private var showDeleteAccountAlert = false
     @State private var isLoggingOut = false
     @State private var showPaywall = false
+    @State private var authProvider: AuthProvider = .unknown
     
     var body: some View {
         NavigationStack {
@@ -64,6 +65,10 @@ struct SettingsView: View {
                 }
             } message: {
                 Text("Diese Aktion kann nicht rückgängig gemacht werden. Alle deine Daten werden gelöscht.")
+            }
+            .task {
+                // Auth Provider beim Laden der View ermitteln
+                authProvider = await supabase.getAuthProvider()
             }
         }
     }
@@ -260,8 +265,10 @@ struct SettingsView: View {
                 .padding(.vertical, 4)
             }
             
-            // Warnhinweis für E-Mail-User (kein iCloud-Sync)
-            if !isAppleSignIn {
+            // Account-Status: Warnhinweis oder Bestätigung
+            if isAppleSignIn {
+                appleIdLinkedView
+            } else if authProvider == .email {
                 localDataWarningView
             }
             
@@ -280,32 +287,28 @@ struct SettingsView: View {
         }
     }
     
-    // MARK: - Apple Sign In Check
+    // MARK: - Auth Provider Check
     
     /// Prüft ob der User mit Apple Sign In eingeloggt ist
-    /// Apple Sign In E-Mails enden auf @privaterelay.appleid.com oder sind versteckt
     private var isAppleSignIn: Bool {
-        guard let email = supabase.userProfile?.email else {
-            // Keine E-Mail = wahrscheinlich Apple Sign In mit versteckter E-Mail
-            return true
-        }
-        return email.contains("@privaterelay.appleid.com")
+        authProvider == .apple
     }
     
-    // MARK: - Local Data Warning View
+    // MARK: - Account Status Views
     
+    /// Warnhinweis für E-Mail-User (kein iCloud-Sync)
     private var localDataWarningView: some View {
         HStack(spacing: 12) {
-            Image(systemName: "exclamationmark.icloud")
+            Image(systemName: "exclamationmark.triangle.fill")
                 .font(.title2)
                 .foregroundStyle(.orange)
             
             VStack(alignment: .leading, spacing: 4) {
-                Text("Lokale Daten")
+                Text("⚠️ Lokale Daten")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 
-                Text("Deine Daten sind nur lokal gespeichert. Mache regelmäßige Backups!")
+                Text("Du bist per E-Mail eingeloggt. Deine Leads sind an dieses Gerät gebunden. Bitte mache regelmäßige Exporte.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -313,6 +316,28 @@ struct SettingsView: View {
         }
         .padding(.vertical, 8)
         .listRowBackground(Color.orange.opacity(0.1))
+    }
+    
+    /// Bestätigung für Apple-User (CloudKit-Sync aktiv)
+    private var appleIdLinkedView: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "checkmark.icloud.fill")
+                .font(.title2)
+                .foregroundStyle(.green)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("✅ Mit Apple ID verknüpft")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                
+                Text("Deine Leads werden automatisch über iCloud synchronisiert.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 8)
+        .listRowBackground(Color.green.opacity(0.1))
     }
     
     // MARK: - App Settings Section
