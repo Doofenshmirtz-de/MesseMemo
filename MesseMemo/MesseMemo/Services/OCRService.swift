@@ -3,7 +3,7 @@
 //  MesseMemo
 //
 //  Created by Jarno Kibies on 10.12.25.
-//  Verbesserte Version mit NSDataDetector und intelligenter Parsing-Logik
+//  Verbesserte Version mit NSDataDetector, intelligenter Parsing-Logik und QR-Code-Erkennung
 //
 
 import Foundation
@@ -11,7 +11,7 @@ import Vision
 import UIKit
 
 /// Service für die Texterkennung auf Visitenkarten mittels Vision Framework
-/// Nutzt NSDataDetector für zuverlässigere Erkennung von E-Mails und Telefonnummern
+/// Unterstützt OCR-Texterkennung und QR-Code-Extraktion (vCard, URLs)
 final class OCRService {
     
     // MARK: - Configuration
@@ -408,6 +408,66 @@ final class OCRService {
         }
         
         return score
+    }
+    
+    // MARK: - QR Code Detection
+    
+    /// Extrahiert QR-Code-Inhalt aus einem Bild
+    /// - Parameter image: Das zu analysierende Bild
+    /// - Returns: Der String-Inhalt des ersten gefundenen QR-Codes oder nil
+    func extractQRCode(from image: UIImage) async throws -> String? {
+        guard let cgImage = image.cgImage else {
+            throw OCRError.invalidImage
+        }
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            let request = VNDetectBarcodesRequest { request, error in
+                if let error = error {
+                    continuation.resume(throwing: OCRError.recognitionFailed(error.localizedDescription))
+                    return
+                }
+                
+                guard let observations = request.results as? [VNBarcodeObservation] else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                
+                // Suche nach QR-Codes und extrahiere den Inhalt
+                for observation in observations {
+                    if observation.symbology == .qr, let payload = observation.payloadStringValue {
+                        continuation.resume(returning: payload)
+                        return
+                    }
+                }
+                
+                // Kein QR-Code gefunden
+                continuation.resume(returning: nil)
+            }
+            
+            // Nur nach QR-Codes suchen
+            request.symbologies = [.qr]
+            
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            
+            do {
+                try handler.perform([request])
+            } catch {
+                continuation.resume(throwing: OCRError.recognitionFailed(error.localizedDescription))
+            }
+        }
+    }
+    
+    /// Erkennt ob der QR-Code-Inhalt eine vCard ist
+    func isVCard(_ content: String) -> Bool {
+        return content.uppercased().contains("BEGIN:VCARD") && content.uppercased().contains("END:VCARD")
+    }
+    
+    /// Erkennt ob der QR-Code-Inhalt eine URL ist
+    func isURL(_ content: String) -> Bool {
+        if let url = URL(string: content) {
+            return url.scheme?.lowercased() == "http" || url.scheme?.lowercased() == "https"
+        }
+        return false
     }
     
     // MARK: - Helper Methods

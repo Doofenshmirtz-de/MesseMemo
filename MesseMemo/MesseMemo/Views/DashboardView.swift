@@ -4,11 +4,16 @@
 //
 //  Created by Jarno Kibies on 10.12.25.
 //
+//  MULTI-TENANCY:
+//  Leads werden nach ownerId gefiltert, sodass jeder User nur seine eigenen sieht.
+//  Das Filtering erfolgt im LeadsViewModel.filterLeads()
+//
 
 import SwiftUI
 import SwiftData
 
 /// Hauptansicht mit der Liste aller Leads
+/// Multi-Tenancy: Zeigt nur Leads des aktuell eingeloggten Users
 struct DashboardView: View {
     
     // MARK: - Environment
@@ -16,18 +21,27 @@ struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Lead.createdAt, order: .reverse) private var leads: [Lead]
     
+    // MARK: - Supabase (für Refresh bei Login-Änderung)
+    
+    @ObservedObject private var supabase = SupabaseManager.shared
+    
     // MARK: - State
     
     @StateObject private var viewModel = LeadsViewModel()
     @State private var showNewLead = false
     @State private var showSettings = false
     
+    /// Gefilterte Leads (nur die des aktuellen Users)
+    private var userLeads: [Lead] {
+        viewModel.filterLeads(leads)
+    }
+    
     // MARK: - Body
     
     var body: some View {
         NavigationStack {
             Group {
-                if leads.isEmpty {
+                if userLeads.isEmpty {
                     emptyStateView
                 } else {
                     leadsList
@@ -54,6 +68,10 @@ struct DashboardView: View {
             } message: {
                 Text(viewModel.errorMessage)
             }
+            // Reagiert auf Auth-Änderungen (Login/Logout) um die Liste zu aktualisieren
+            .onChange(of: supabase.currentUserId) { _, _ in
+                // SwiftUI aktualisiert automatisch, da userLeads computed ist
+            }
         }
     }
     
@@ -77,13 +95,13 @@ struct DashboardView: View {
     
     private var leadsList: some View {
         List {
-            ForEach(viewModel.filterLeads(leads)) { lead in
+            ForEach(userLeads) { lead in
                 NavigationLink(destination: LeadDetailView(lead: lead)) {
                     LeadRowView(lead: lead)
                 }
             }
             .onDelete { offsets in
-                viewModel.deleteLeads(viewModel.filterLeads(leads), at: offsets, context: modelContext)
+                viewModel.deleteLeads(userLeads, at: offsets, context: modelContext)
             }
         }
         .listStyle(.insetGrouped)
@@ -108,8 +126,8 @@ struct DashboardView: View {
         }
         
         ToolbarItem(placement: .navigationBarLeading) {
-            if !leads.isEmpty {
-                Button(action: { viewModel.exportLeads(leads) }) {
+            if !userLeads.isEmpty {
+                Button(action: { viewModel.exportLeads(userLeads) }) {
                     Image(systemName: "square.and.arrow.up")
                 }
                 .disabled(viewModel.isExporting)

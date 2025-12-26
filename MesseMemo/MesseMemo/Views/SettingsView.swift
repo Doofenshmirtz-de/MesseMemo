@@ -213,9 +213,9 @@ struct SettingsView: View {
             // User Info
             if let profile = supabase.userProfile {
                 HStack(spacing: 12) {
-                    Image(systemName: "person.circle.fill")
+                    Image(systemName: isAppleSignIn ? "apple.logo" : "person.circle.fill")
                         .font(.system(size: 44))
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(isAppleSignIn ? Color.primary : Color.blue)
                     
                     VStack(alignment: .leading, spacing: 2) {
                         Text(profile.displayName ?? "MesseMemo User")
@@ -260,6 +260,11 @@ struct SettingsView: View {
                 .padding(.vertical, 4)
             }
             
+            // Warnhinweis für E-Mail-User (kein iCloud-Sync)
+            if !isAppleSignIn {
+                localDataWarningView
+            }
+            
             // Logout Button
             Button {
                 showLogoutAlert = true
@@ -273,6 +278,41 @@ struct SettingsView: View {
             }
             .disabled(isLoggingOut)
         }
+    }
+    
+    // MARK: - Apple Sign In Check
+    
+    /// Prüft ob der User mit Apple Sign In eingeloggt ist
+    /// Apple Sign In E-Mails enden auf @privaterelay.appleid.com oder sind versteckt
+    private var isAppleSignIn: Bool {
+        guard let email = supabase.userProfile?.email else {
+            // Keine E-Mail = wahrscheinlich Apple Sign In mit versteckter E-Mail
+            return true
+        }
+        return email.contains("@privaterelay.appleid.com")
+    }
+    
+    // MARK: - Local Data Warning View
+    
+    private var localDataWarningView: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.icloud")
+                .font(.title2)
+                .foregroundStyle(.orange)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Lokale Daten")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                
+                Text("Deine Daten sind nur lokal gespeichert. Mache regelmäßige Backups!")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 8)
+        .listRowBackground(Color.orange.opacity(0.1))
     }
     
     // MARK: - App Settings Section

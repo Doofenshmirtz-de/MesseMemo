@@ -6,6 +6,11 @@
 //
 //  HINWEIS: CloudKit erfordert Default-Werte für alle non-optional Attribute!
 //
+//  MULTI-TENANCY:
+//  Das Feld `ownerId` speichert die Supabase User-ID, um sicherzustellen,
+//  dass jeder User nur seine eigenen Leads sieht. Dies ist wichtig für
+//  Datenschutz und wenn mehrere Accounts auf einem Gerät verwendet werden.
+//
 
 import Foundation
 import SwiftData
@@ -21,6 +26,11 @@ final class Lead {
     
     /// Eindeutige ID des Leads
     var id: UUID = UUID()
+    
+    /// Owner ID (Supabase User-ID) für Multi-Tenancy
+    /// Stellt sicher, dass jeder User nur seine eigenen Leads sieht
+    /// Default: "local_user" für Offline-Erstellung (wird bei Login migriert)
+    var ownerId: String = "local_user"
     
     /// Vollständiger Name des Kontakts
     var name: String = ""
@@ -58,6 +68,7 @@ final class Lead {
     
     init(
         id: UUID = UUID(),
+        ownerId: String = "local_user",
         name: String = "",
         company: String = "",
         email: String = "",
@@ -70,6 +81,7 @@ final class Lead {
         updatedAt: Date = Date()
     ) {
         self.id = id
+        self.ownerId = ownerId
         self.name = name
         self.company = company
         self.email = email
