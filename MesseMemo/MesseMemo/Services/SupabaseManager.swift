@@ -54,6 +54,7 @@ final class SupabaseManager: ObservableObject {
     // MARK: - Initialization
     
     private init() {
+        // Einfache Initialisierung - Auth-Optionen werden über SupabaseClient.Options gesetzt
         self.client = SupabaseClient(
             supabaseURL: URL(string: SupabaseConfig.url)!,
             supabaseKey: SupabaseConfig.anonKey

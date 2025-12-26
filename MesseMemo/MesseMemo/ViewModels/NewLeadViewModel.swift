@@ -59,23 +59,38 @@ final class NewLeadViewModel: ObservableObject {
         qrCodeURL = nil
         
         do {
-            // 0. Bild auf Bildschirm-Seitenverhältnis zuschneiden (Center Crop)
-            // Löst das "Zoom-Effekt" Problem: Kamera-Vorschau nutzt resizeAspectFill,
-            // aber das Foto ist das volle 4:3 Sensorbild. Durch Cropping wird
-            // "What you see is what you get" erreicht, was die OCR-Ergebnisse verbessert.
-            let croppedImage = image.cropToScreenAspectRatio()
+            // ============================================
+            // BILD-VERARBEITUNG: "What you see is what you get"
+            // ============================================
             
-            // 1. Gecropptes Bild speichern (für Fallback bei OCR-Fehlern)
+            // 1. Ausrichtung fixen (Wichtig für OCR!)
+            let fixedImage = image.fixOrientation()
+            
+            // 2. Fallback: Wenn Croppen fehlschlägt, nimm das Fixed Image
+            var finalImage = fixedImage
+            
+            // 3. Versuch zu croppen (Auf Screen Ratio)
+            let screenRatio = UIScreen.main.bounds.width / UIScreen.main.bounds.height
+            if let cropped = fixedImage.cropToAspectRatio(screenRatio) {
+                finalImage = cropped
+                print("NewLeadViewModel: Bild gecroppt - \(finalImage.size)")
+            } else {
+                print("NewLeadViewModel: Crop fehlgeschlagen, nutze Original")
+            }
+            
+            print("NewLeadViewModel: Bild verarbeitet - Original: \(image.size), Final: \(finalImage.size)")
+            
+            // 1. Finales Bild speichern (für Fallback bei OCR-Fehlern)
             do {
-                let filename = try imageStorageService.saveImage(croppedImage, for: leadId)
+                let filename = try imageStorageService.saveImage(finalImage, for: leadId)
                 originalImageFilename = filename
             } catch {
                 print("NewLeadViewModel: Warnung - Bild konnte nicht gespeichert werden: \(error.localizedDescription)")
             }
             
-            // 2. Parallel: OCR und QR-Code-Erkennung mit gecropptem Bild starten
-            async let ocrTask = ocrService.recognizeText(from: croppedImage)
-            async let qrTask = ocrService.extractQRCode(from: croppedImage)
+            // 2. Parallel: OCR und QR-Code-Erkennung mit finalem Bild starten
+            async let ocrTask = ocrService.recognizeText(from: finalImage)
+            async let qrTask = ocrService.extractQRCode(from: finalImage)
             
             let (recognizedLines, qrContent) = try await (ocrTask, qrTask)
             
