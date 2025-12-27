@@ -59,24 +59,8 @@ final class NewLeadViewModel: ObservableObject {
         qrCodeURL = nil
         
         do {
-            // ============================================
-            // BILD-VERARBEITUNG: "What you see is what you get"
-            // ============================================
-            
-            // 1. Ausrichtung fixen (Wichtig für OCR!)
-            let fixedImage = image.fixOrientation()
-            
-            // 2. Fallback: Wenn Croppen fehlschlägt, nimm das Fixed Image
-            var finalImage = fixedImage
-            
-            // 3. Versuch zu croppen (Auf Screen Ratio)
-            let screenRatio = UIScreen.main.bounds.width / UIScreen.main.bounds.height
-            if let cropped = fixedImage.cropToAspectRatio(screenRatio) {
-                finalImage = cropped
-                print("NewLeadViewModel: Bild gecroppt - \(finalImage.size)")
-            } else {
-                print("NewLeadViewModel: Crop fehlgeschlagen, nutze Original")
-            }
+            // Bild-Verarbeitung: Nur Orientierung korrigieren
+            let finalImage = image.prepareForOCR()
             
             print("NewLeadViewModel: Bild verarbeitet - Original: \(image.size), Final: \(finalImage.size)")
             
