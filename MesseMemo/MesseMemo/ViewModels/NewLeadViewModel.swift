@@ -31,6 +31,7 @@ final class NewLeadViewModel: ObservableObject {
     @Published var showError = false
     @Published var errorMessage = ""
     @Published var isSaving = false
+    @Published var isCloudOCRRunning = false
     @Published var showOCRSuccessAnimation = false
     
     // MARK: - Services
@@ -55,6 +56,7 @@ final class NewLeadViewModel: ObservableObject {
     /// Nutzt sowohl OCR als auch QR-Code-Erkennung, wobei QR-Daten priorisiert werden
     func processImage(_ image: UIImage) async {
         isProcessingImage = true
+        isCloudOCRRunning = UserDefaults.standard.bool(forKey: "useCloudOCR")
         qrCodeDetected = false
         qrCodeURL = nil
         
@@ -141,6 +143,9 @@ final class NewLeadViewModel: ObservableObject {
                     showOCRSuccessAnimation = false
                 }
             }
+            
+            // Cleanup Cloud UI State
+            isCloudOCRRunning = false
             
         } catch let error as OCRError {
             errorMessage = error.userFriendlyMessage

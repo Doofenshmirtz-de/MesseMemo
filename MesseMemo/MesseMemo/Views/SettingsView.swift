@@ -20,6 +20,10 @@ struct SettingsView: View {
     @State private var showPaywall = false
     @State private var authProvider: AuthProvider = .unknown
     
+    // Cloud KI Settings
+    @AppStorage("useCloudOCR") private var useCloudOCR = false
+    @State private var showCloudPrivacyAlert = false
+    
     var body: some View {
         NavigationStack {
             List {
@@ -65,6 +69,14 @@ struct SettingsView: View {
                 }
             } message: {
                 Text("Diese Aktion kann nicht rückgängig gemacht werden. Alle deine Daten werden gelöscht.")
+            }
+            .alert("Cloud KI Unterstützung", isPresented: $showCloudPrivacyAlert) {
+                Button("Abbrechen", role: .cancel) { }
+                Button("Aktivieren") {
+                    useCloudOCR = true
+                }
+            } message: {
+                Text("Durch das Aktivieren der Cloud KI Unterstützung werden die Texte deiner Visitenkarten zur Analyse an Google (Gemini) gesendet. Dies kann die Erkennungsrate deutlich verbessern. Deine Daten werden dabei gemäß den Datenschutzbestimmungen verarbeitet.")
             }
             .task {
                 // Auth Provider beim Laden der View ermitteln
@@ -159,6 +171,20 @@ struct SettingsView: View {
         if credits > 10 { return .green }
         if credits > 3 { return .orange }
         return .red
+    }
+    
+    // Binding für Cloud KI mit Alert-Logik
+    private var cloudOCRBinding: Binding<Bool> {
+        Binding(
+            get: { useCloudOCR },
+            set: { newValue in
+                if newValue {
+                    showCloudPrivacyAlert = true
+                } else {
+                    useCloudOCR = false
+                }
+            }
+        )
     }
     
     // MARK: - Upgrade Button View
@@ -361,6 +387,25 @@ struct SettingsView: View {
             } label: {
                 Label("Sprache", systemImage: "globe")
             }
+            
+            Divider()
+            
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle(isOn: cloudOCRBinding) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Cloud KI Unterstützung")
+                            Text("Bessere Erkennung via Gemini")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(.purple)
+                    }
+                }
+            }
+            .padding(.vertical, 4)
         }
     }
     

@@ -194,7 +194,7 @@ struct NewLeadView: View {
                     .scaleEffect(1.5)
                     .tint(.white)
                 
-                Text("Visitenkarte wird analysiert...")
+                Text(viewModel.isCloudOCRRunning ? "KI-Analyse (Gemini)..." : "Visitenkarte wird analysiert...")
                     .font(.headline)
                     .foregroundStyle(.white)
             }
