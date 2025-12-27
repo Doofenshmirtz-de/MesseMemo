@@ -67,9 +67,33 @@ final class OCRService {
     // MARK: - Text Recognition
     
     /// Führt die Texterkennung auf einem Bild durch
+    /// Prüft ob Cloud KI aktiv ist und nutzt diese ggf. mit Fallback auf Apple Vision
     /// - Parameter image: Das zu analysierende Bild
     /// - Returns: Array von erkannten Textzeilen
     func recognizeText(from image: UIImage) async throws -> [String] {
+        let useCloud = UserDefaults.standard.bool(forKey: "useCloudOCR")
+        
+        if useCloud {
+            print("OCRService: Versuche Cloud KI (Gemini) Erkennung...")
+            do {
+                // Pfad B: Cloud Call
+                let cloudResult = try await recognizeTextCloud(from: image)
+                if !cloudResult.isEmpty {
+                    print("OCRService: Cloud KI erfolgreich.")
+                    return cloudResult
+                }
+            } catch {
+                print("OCRService: Cloud KI fehlgeschlagen oder noch nicht aktiv: \(error.localizedDescription). Soft-Fallback auf lokales Vision.")
+            }
+        }
+        
+        // Pfad A: Lokales Apple Vision Framework (Standard / Fallback)
+        print("OCRService: Nutze lokales Vision Framework.")
+        return try await recognizeTextLocal(from: image)
+    }
+    
+    /// Lokale Texterkennung mittels Apple Vision
+    private func recognizeTextLocal(from image: UIImage) async throws -> [String] {
         guard let cgImage = image.cgImage else {
             throw OCRError.invalidImage
         }
@@ -110,6 +134,20 @@ final class OCRService {
                 continuation.resume(throwing: OCRError.recognitionFailed(error.localizedDescription))
             }
         }
+    }
+    
+    /// Platzhalter/Stub für Gemini Cloud KI
+    /// Wird später durch Supabase Edge Functions oder direkten SDK-Call ersetzt
+    private func recognizeTextCloud(from image: UIImage) async throws -> [String] {
+        // HINWEIS: Dies ist aktuell ein Stub.
+        // Sobald Gemini in Supabase konfiguriert ist, wird hier der API-Call implementiert.
+        
+        // Simuliere Netzwerklatenz
+        try await Task.sleep(nanoseconds: 1_000_000_000) 
+        
+        // Aktuell geben wir noch eine leere Liste zurück, um den Fallback zu triggern
+        // throw OCRError.recognitionFailed("Cloud KI noch nicht fertig implementiert")
+        return []
     }
     
     // MARK: - Contact Parsing
