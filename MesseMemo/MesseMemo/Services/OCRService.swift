@@ -152,7 +152,49 @@ final class OCRService {
     
     // MARK: - Contact Parsing
     
-    /// Analysiert den erkannten Text und extrahiert strukturierte Kontaktdaten
+    /// Analysiert den Text und extrahiert Kontaktdaten
+    /// Wählt je nach Einstellung lokale Logik oder Cloud-KI
+    func analyzeContact(from lines: [String]) async -> ParsedContact {
+        let useCloud = UserDefaults.standard.bool(forKey: "useCloudOCR")
+        
+        if useCloud {
+            print("OCRService: Versuche Cloud KI Analyse...")
+            // Prüfe ob User eingeloggt und Credits hat
+            if SupabaseManager.shared.isAuthenticated && SupabaseManager.shared.hasCredits {
+                do {
+                    let result = try await SupabaseManager.shared.processCard(text: lines)
+                    print("OCRService: Cloud Analyse erfolgreich. Credits remaining: \(result.creditsRemaining)")
+                    
+                    // Convert Cloud Data to ParsedContact
+                    var contact = ParsedContact()
+                    contact.name = result.data.name ?? ""
+                    contact.company = result.data.company ?? ""
+                    contact.email = result.data.email ?? ""
+                    contact.phone = result.data.phone ?? ""
+                    
+                    // Fallback für leere Felder: Lokale Logik dazumischen?
+                    // Optional: Wenn KI versagt (leere Felder), lokal nachbessern
+                    if contact.name.isEmpty || contact.email.isEmpty {
+                         let localContact = parseContactInfo(from: lines)
+                         if contact.name.isEmpty { contact.name = localContact.name }
+                         if contact.email.isEmpty { contact.email = localContact.email }
+                         if contact.phone.isEmpty { contact.phone = localContact.phone }
+                         if contact.company.isEmpty { contact.company = localContact.company }
+                    }
+                    
+                    return contact
+                } catch {
+                    print("OCRService: Cloud Analyse fehlgeschlagen: \(error). Fallback auf Lokal.")
+                }
+            } else {
+                print("OCRService: Cloud KI aktiv, aber kein User/Credit. Fallback auf Lokal.")
+            }
+        }
+        
+        return parseContactInfo(from: lines)
+    }
+
+    /// Analysiert den erkannten Text und extrahiert strukturierte Kontaktdaten (Lokal / Regex)
     /// Verbesserte Version mit NSDataDetector und Positionsanalyse
     /// - Parameter lines: Array von erkannten Textzeilen
     /// - Returns: Extrahierte Kontaktdaten
@@ -229,6 +271,7 @@ final class OCRService {
     /// Extrahiert E-Mail-Adressen aus Text
     private func extractEmails(from text: String) -> [String] {
         var emails: [String] = []
+
         
         // Methode 1: NSDataDetector (für mailto: Links)
         if let detector = emailDetector {
