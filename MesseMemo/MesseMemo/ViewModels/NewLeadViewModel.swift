@@ -86,7 +86,8 @@ final class NewLeadViewModel: ObservableObject {
             
             // OCR-Daten parsen
             if !recognizedLines.isEmpty {
-                ocrContact = ocrService.parseContactInfo(from: recognizedLines)
+                // Nutze analyzeContact (async), welche automatisch zwischen Cloud und Lokal wählt
+                ocrContact = await ocrService.analyzeContact(from: recognizedLines)
             }
             
             // QR-Code-Daten parsen (falls vorhanden)

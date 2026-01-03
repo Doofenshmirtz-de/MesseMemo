@@ -363,6 +363,54 @@ final class SupabaseManager: ObservableObject {
     // MARK: - Helper
     // ============================================
     
+    // ============================================
+    // MARK: - AI Card Processing (Edge Function)
+    // ============================================
+    
+    /// Verarbeitet OCR-Text via Edge Function (Gemini) zu strukturierten Daten
+    /// Verbraucht 1 Credit bei Erfolg
+    func processCard(text: [String]) async throws -> ProcessCardResult {
+        guard isAuthenticated else {
+            throw SupabaseError.notAuthenticated
+        }
+        
+        let requestBody: [String: [String]] = [
+            "text": text
+        ]
+        
+        let response: ProcessCardResponse = try await client.functions.invoke(
+            "process-card",
+            options: FunctionInvokeOptions(body: requestBody)
+        )
+        
+        if let error = response.error {
+            if error.contains("Kein Guthaben") || error.contains("credits") {
+                throw SupabaseError.noCredits
+            }
+            throw SupabaseError.emailGenerationFailed(error) // Reuse existing error or create new one
+        }
+        
+        guard response.success, let data = response.data else {
+            throw SupabaseError.emailGenerationFailed("Keine Daten zurückerhalten")
+        }
+        
+        // Profile aktualisieren
+        await MainActor.run {
+            Task {
+                await refreshProfile()
+            }
+        }
+        
+        return ProcessCardResult(
+            data: data,
+            creditsRemaining: response.creditsRemaining ?? (currentCredits - 1)
+        )
+    }
+    
+    // ============================================
+    // MARK: - Helper
+    // ============================================
+    
     private func mapAuthError(_ error: Error) -> String {
         let errorString = error.localizedDescription.lowercased()
         
@@ -380,6 +428,8 @@ final class SupabaseManager: ObservableObject {
         
         return "Ein Fehler ist aufgetreten. Bitte versuche es erneut."
     }
+    
+
 }
 
 // ============================================
@@ -448,6 +498,37 @@ struct GeneratedEmailResult {
     let creditsRemaining: Int
 }
 
+// MARK: - Process Card Models
+
+struct ProcessCardResponse: Codable {
+    let success: Bool
+    let data: ParsedContactCloudData?
+    let error: String?
+    let creditsRemaining: Int?
+    
+    enum CodingKeys: String, CodingKey {
+        case success
+        case data
+        case error
+        case creditsRemaining = "credits_remaining"
+    }
+}
+
+struct ParsedContactCloudData: Codable {
+    let name: String?
+    let company: String?
+    let email: String?
+    let phone: String?
+    let job_title: String?
+    let website: String?
+    let address: String?
+}
+
+struct ProcessCardResult {
+    let data: ParsedContactCloudData
+    let creditsRemaining: Int
+}
+
 // ============================================
 // MARK: - Errors
 // ============================================
@@ -465,7 +546,7 @@ enum SupabaseError: Error, LocalizedError {
         case .noCredits:
             return "Kein Guthaben mehr. Bitte lade dein Konto auf."
         case .emailGenerationFailed(let reason):
-            return "E-Mail konnte nicht generiert werden: \(reason)"
+            return "KI-Verarbeitung fehlgeschlagen: \(reason)"
         case .networkError:
             return "Keine Internetverbindung."
         }
@@ -496,3 +577,5 @@ enum AuthProvider {
         }
     }
 }
+
+
