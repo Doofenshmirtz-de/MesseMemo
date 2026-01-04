@@ -20,7 +20,7 @@ struct RootView: View {
                 splashView
             } else if supabase.isAuthenticated {
                 // User ist eingeloggt
-                DashboardView()
+                MainTabView()
             } else {
                 // User ist nicht eingeloggt
                 AuthView()

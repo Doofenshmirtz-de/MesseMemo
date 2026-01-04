@@ -36,6 +36,9 @@ struct NewLeadView: View {
                 
                 // Textnotizen
                 notesSection
+                
+                // QR Code Link (falls vorhanden)
+                qrLinkSection
             }
             .navigationTitle("Neuer Kontakt")
             .navigationBarTitleDisplayMode(.inline)
@@ -182,6 +185,36 @@ struct NewLeadView: View {
         }
     }
     
+    // MARK: - QR Code Section (Web Link)
+    
+    @ViewBuilder
+    private var qrLinkSection: some View {
+        if let urlString = viewModel.qrCodeURL, let url = URL(string: urlString) {
+            Section {
+                Button {
+                    UIApplication.shared.open(url)
+                } label: {
+                    HStack {
+                        Image(systemName: "link")
+                            .foregroundStyle(.blue)
+                        Text("Webseite öffnen")
+                            .foregroundStyle(.blue)
+                        Spacer()
+                        Text(urlString)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Image(systemName: "arrow.up.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("QR Code Link")
+            }
+        }
+    }
+
     // MARK: - Processing Overlay
     
     private var processingOverlay: some View {
