@@ -25,6 +25,7 @@ struct LeadDetailView: View {
     @StateObject private var viewModel: LeadDetailViewModel
     @State private var showPaywall = false
     @State private var paywallTriggerFeature: PremiumFeature?
+    @State private var showCopyFeedback = false
     
     // MARK: - Initialization
     
@@ -507,9 +508,28 @@ struct LeadDetailView: View {
                 .disabled(viewModel.originalImage == nil)
             }
             
-            Button(action: viewModel.copyToClipboard) {
-                Label("In Zwischenablage kopieren", systemImage: "doc.on.doc")
+            Button(action: {
+                viewModel.copyToClipboard()
+                showCopyFeedback = true
+                
+                // Reset feedback after delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    showCopyFeedback = false
+                }
+            }) {
+                HStack {
+                    Label(showCopyFeedback ? "Kopiert!" : "In Zwischenablage kopieren", 
+                          systemImage: showCopyFeedback ? "checkmark" : "doc.on.doc")
+                        .foregroundStyle(showCopyFeedback ? .green : .blue)
+                    
+                    if showCopyFeedback {
+                        Spacer()
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(.green)
+                    }
+                }
             }
+            .sensoryFeedback(.success, trigger: showCopyFeedback)
             
             Button(role: .destructive, action: { viewModel.showDeleteConfirmation = true }) {
                 Label("Kontakt löschen", systemImage: "trash")

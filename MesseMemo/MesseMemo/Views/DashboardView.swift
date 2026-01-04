@@ -40,23 +40,37 @@ struct DashboardView: View {
     
     var body: some View {
         NavigationStack {
-            Group {
-                if userLeads.isEmpty {
-                    emptyStateView
-                } else {
-                    leadsList
+            ZStack {
+                // Background
+                Color(.systemGray6)
+                    .ignoresSafeArea()
+                
+                VStack(spacing: 0) {
+                    // Custom Header
+                    customHeader
+                    
+                    if userLeads.isEmpty {
+                        emptyStateView
+                            .frame(maxHeight: .infinity)
+                    } else {
+                        // Card List
+                        ScrollView {
+                            LazyVStack(spacing: 16) {
+                                ForEach(userLeads) { lead in
+                                    NavigationLink(destination: LeadDetailView(lead: lead)) {
+                                        LeadCardView(lead: lead)
+                                    }
+                                    .buttonStyle(.plain) // Wichtig damit die Card nicht blau wird
+                                }
+                            }
+                            .padding()
+                        }
+                    }
                 }
             }
-            .navigationTitle("MesseMemo")
-            .searchable(text: $viewModel.searchText, prompt: "Kontakte durchsuchen")
-            .toolbar {
-                toolbarContent
-            }
+            .navigationBarHidden(true) // Standard Navbar verstecken
             .sheet(isPresented: $showNewLead) {
                 NewLeadView()
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
             }
             .sheet(isPresented: $viewModel.showExportSheet) {
                 if let url = viewModel.exportURL {
@@ -75,6 +89,45 @@ struct DashboardView: View {
         }
     }
     
+    // MARK: - Custom Header
+    
+    private var customHeader: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("MesseMemo")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
+                
+                Text("\(subscriptionManager.credits) Credits")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.accentColor.opacity(0.1))
+                    .foregroundStyle(Color.accentColor)
+                    .clipShape(Capsule())
+            }
+            
+            Spacer()
+            
+            // Add Lead Button (Mini)
+            Button(action: { showNewLead = true }) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 32))
+                    .foregroundStyle(Color.accentColor)
+                    .shadow(color: Color.accentColor.opacity(0.3), radius: 4, y: 2)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.top, 16)
+        .padding(.bottom, 8)
+        .background(Color(.systemGray6)) // Blendet mit Hintergrund
+    }
+    
+    // MARK: - Subscription Manager
+    
+    @ObservedObject private var subscriptionManager = SubscriptionManager.shared
+    
     // MARK: - Empty State
     
     private var emptyStateView: some View {
@@ -89,109 +142,6 @@ struct DashboardView: View {
             }
             .buttonStyle(.borderedProminent)
         }
-    }
-    
-    // MARK: - Leads List
-    
-    private var leadsList: some View {
-        List {
-            ForEach(userLeads) { lead in
-                NavigationLink(destination: LeadDetailView(lead: lead)) {
-                    LeadRowView(lead: lead)
-                }
-            }
-            .onDelete { offsets in
-                viewModel.deleteLeads(userLeads, at: offsets, context: modelContext)
-            }
-        }
-        .listStyle(.insetGrouped)
-    }
-    
-    // MARK: - Toolbar
-    
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .navigationBarTrailing) {
-            HStack(spacing: 16) {
-                Button(action: { showNewLead = true }) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.title2)
-                }
-                
-                Button(action: { showSettings = true }) {
-                    Image(systemName: "gearshape.fill")
-                        .font(.title3)
-                }
-            }
-        }
-        
-        ToolbarItem(placement: .navigationBarLeading) {
-            if !userLeads.isEmpty {
-                Button(action: { viewModel.exportLeads(userLeads) }) {
-                    Image(systemName: "square.and.arrow.up")
-                }
-                .disabled(viewModel.isExporting)
-            }
-        }
-    }
-}
-
-// MARK: - Lead Row View
-
-struct LeadRowView: View {
-    let lead: Lead
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            // Avatar
-            ZStack {
-                Circle()
-                    .fill(Color.accentColor.opacity(0.15))
-                    .frame(width: 50, height: 50)
-                
-                Text(lead.displayName.prefix(1).uppercased())
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Color.accentColor)
-            }
-            
-            // Info
-            VStack(alignment: .leading, spacing: 4) {
-                Text(lead.displayName)
-                    .font(.headline)
-                    .lineLimit(1)
-                
-                if !lead.company.isEmpty {
-                    Text(lead.company)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                
-                HStack(spacing: 8) {
-                    if !lead.email.isEmpty {
-                        Label(lead.email, systemImage: "envelope")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    
-                    if lead.hasAudioNote {
-                        Image(systemName: "waveform")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    }
-                }
-            }
-            
-            Spacer()
-            
-            // Date
-            Text(lead.formattedDate)
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.vertical, 4)
     }
 }
 

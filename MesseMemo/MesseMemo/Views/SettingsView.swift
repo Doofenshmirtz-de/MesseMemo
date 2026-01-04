@@ -24,6 +24,10 @@ struct SettingsView: View {
     @AppStorage("useCloudOCR") private var useCloudOCR = false
     @State private var showCloudPrivacyAlert = false
     
+    // Legal Sheets
+    @State private var showPrivacySheet = false
+    @State private var showTermsSheet = false
+    
     var body: some View {
         NavigationStack {
             List {
@@ -39,6 +43,9 @@ struct SettingsView: View {
                 // MARK: - Support Section
                 supportSection
                 
+                // MARK: - Legal Section
+                legalSection
+                
                 // MARK: - Danger Zone
                 dangerZoneSection
                 
@@ -47,13 +54,6 @@ struct SettingsView: View {
             }
             .navigationTitle("Einstellungen")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Fertig") {
-                        dismiss()
-                    }
-                }
-            }
             .alert("Abmelden", isPresented: $showLogoutAlert) {
                 Button("Abbrechen", role: .cancel) { }
                 Button("Abmelden", role: .destructive) {
@@ -82,6 +82,30 @@ struct SettingsView: View {
                 // Auth Provider beim Laden der View ermitteln
                 authProvider = await supabase.getAuthProvider()
             }
+            .sheet(isPresented: $showPrivacySheet) {
+                NavigationStack {
+                    ScrollView {
+                        Text("Datenschutzerklärung: Die App nutzt Google Gemini für die Textanalyse. Deine Daten werden sicher verarbeitet...")
+                            .padding()
+                    }
+                    .navigationTitle("Datenschutz")
+                    .toolbar {
+                        Button("Fertig") { showPrivacySheet = false }
+                    }
+                }
+            }
+            .sheet(isPresented: $showTermsSheet) {
+                NavigationStack {
+                    ScrollView {
+                        Text("Nutzungsbedingungen: Durch die Nutzung dieser App stimmst du zu...")
+                            .padding()
+                    }
+                    .navigationTitle("AGB")
+                    .toolbar {
+                        Button("Fertig") { showTermsSheet = false }
+                    }
+                }
+            }
         }
     }
     
@@ -89,13 +113,8 @@ struct SettingsView: View {
     
     private var premiumSection: some View {
         Section {
-            // Credit Balance Card
+            // Credit Balance Card (Soft Launch)
             creditsCardView
-            
-            // Upgrade/Buy Credits Button
-            if !subscriptionManager.isPremium {
-                upgradeButtonView
-            }
         }
         .sheet(isPresented: $showPaywall) {
             PaywallView()
@@ -111,56 +130,35 @@ struct SettingsView: View {
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: subscriptionManager.isPremium ? [.yellow, .orange] : [.purple, .blue],
+                            colors: [.blue, .purple],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .frame(width: 50, height: 50)
                 
-                Image(systemName: subscriptionManager.isPremium ? "crown.fill" : "sparkles")
+                Image(systemName: "sparkles")
                     .font(.title2)
                     .foregroundStyle(.white)
             }
             
             // Info
             VStack(alignment: .leading, spacing: 4) {
-                if subscriptionManager.isPremium {
-                    Text("MesseMemo Pro")
-                        .font(.headline)
-                    
-                    Text("Unbegrenzte Zauber-Mails")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("KI-Guthaben")
-                        .font(.headline)
-                    
-                    Text(subscriptionManager.aiButtonSubtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                Text("Dein Tagesguthaben")
+                    .font(.headline)
+                
+                Text("\(subscriptionManager.credits) / 20 Credits")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
             
             Spacer()
             
             // Credit Badge
-            if subscriptionManager.isPremium {
-                HStack(spacing: 4) {
-                    Text("∞")
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.yellow)
-                    
-                    Image(systemName: "checkmark.seal.fill")
-                        .foregroundStyle(.green)
-                }
-            } else {
-                Text("\(subscriptionManager.credits)")
-                    .font(.title)
-                    .fontWeight(.bold)
-                    .foregroundStyle(creditColor)
-            }
+            Text("\(subscriptionManager.credits)")
+                .font(.title)
+                .fontWeight(.bold)
+                .foregroundStyle(creditColor)
         }
         .padding(.vertical, 4)
     }
@@ -371,18 +369,6 @@ struct SettingsView: View {
     private var appSettingsSection: some View {
         Section("App") {
             NavigationLink {
-                Text("Benachrichtigungen")
-            } label: {
-                Label("Benachrichtigungen", systemImage: "bell.badge")
-            }
-            
-            NavigationLink {
-                Text("Erscheinungsbild")
-            } label: {
-                Label("Erscheinungsbild", systemImage: "paintbrush")
-            }
-            
-            NavigationLink {
                 Text("Sprache")
             } label: {
                 Label("Sprache", systemImage: "globe")
@@ -431,17 +417,25 @@ struct SettingsView: View {
                         .foregroundStyle(.red)
                 }
             }
-            
-            NavigationLink {
-                Text("Datenschutzerklärung")
+        }
+    }
+    
+    // MARK: - Legal Section
+    
+    private var legalSection: some View {
+        Section("Rechtliches") {
+            Button {
+                showPrivacySheet = true
             } label: {
-                Label("Datenschutz", systemImage: "hand.raised")
+                Label("Datenschutzerklärung", systemImage: "hand.raised")
+                    .foregroundStyle(.primary)
             }
             
-            NavigationLink {
-                Text("Nutzungsbedingungen")
+            Button {
+                showTermsSheet = true
             } label: {
                 Label("Nutzungsbedingungen", systemImage: "doc.text")
+                    .foregroundStyle(.primary)
             }
         }
     }
