@@ -2,13 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>de</string>
+		<string>en</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.messememo.auth</string>
+			<string>com.messememo.app</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>messememo</string>
@@ -16,14 +21,6 @@
 		</dict>
 	</array>
 	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
-	<key>NSCameraUsageDescription</key>
-	<string>MesseMemo benötigt Zugriff auf die Kamera, um Visitenkarten zu scannen.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>MesseMemo benötigt Zugriff auf das Mikrofon, um Sprachnotizen aufzunehmen.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>MesseMemo benötigt Zugriff auf die Spracherkennung, um Sprachnotizen in Text umzuwandeln.</string>
+	<array/>
 </dict>
 </plist>

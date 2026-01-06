@@ -4,33 +4,25 @@
 //
 //  Created by Jarno Kibies on 10.12.25.
 //
-//  HINWEIS: CloudKit erfordert Default-Werte für alle non-optional Attribute!
-//
-//  MULTI-TENANCY:
-//  Das Feld `ownerId` speichert die Supabase User-ID, um sicherzustellen,
-//  dass jeder User nur seine eigenen Leads sieht. Dies ist wichtig für
-//  Datenschutz und wenn mehrere Accounts auf einem Gerät verwendet werden.
+//  LOCAL-ONLY APP:
+//  Alle Daten werden lokal auf dem Gerät gespeichert.
+//  Kein Cloud-Sync, kein Login erforderlich.
 //
 
 import Foundation
 import SwiftData
 
 /// Das Hauptdatenmodell für einen erfassten Lead/Kontakt
-/// CloudKit-kompatibel: Alle Felder haben Default-Werte
+/// Lokal gespeichert via SwiftData (kein CloudKit)
 @Model
 final class Lead {
     
     // ============================================
-    // MARK: - Properties (mit Default-Werten für CloudKit)
+    // MARK: - Properties (mit Default-Werten)
     // ============================================
     
     /// Eindeutige ID des Leads
     var id: UUID = UUID()
-    
-    /// Owner ID (Supabase User-ID) für Multi-Tenancy
-    /// Stellt sicher, dass jeder User nur seine eigenen Leads sieht
-    /// Default: "local_user" für Offline-Erstellung (wird bei Login migriert)
-    var ownerId: String = "local_user"
     
     /// Vollständiger Name des Kontakts
     var name: String = ""
@@ -43,6 +35,9 @@ final class Lead {
     
     /// Telefonnummer
     var phone: String = ""
+    
+    /// Webseite (z.B. aus QR-Code)
+    var website: String = ""
     
     /// Zusätzliche Notizen (Text)
     var notes: String = ""
@@ -68,11 +63,11 @@ final class Lead {
     
     init(
         id: UUID = UUID(),
-        ownerId: String = "local_user",
         name: String = "",
         company: String = "",
         email: String = "",
         phone: String = "",
+        website: String = "",
         notes: String = "",
         audioFilePath: String? = nil,
         transcript: String? = nil,
@@ -81,11 +76,11 @@ final class Lead {
         updatedAt: Date = Date()
     ) {
         self.id = id
-        self.ownerId = ownerId
         self.name = name
         self.company = company
         self.email = email
         self.phone = phone
+        self.website = website
         self.notes = notes
         self.audioFilePath = audioFilePath
         self.transcript = transcript

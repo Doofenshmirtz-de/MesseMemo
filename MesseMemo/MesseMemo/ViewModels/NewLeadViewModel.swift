@@ -4,6 +4,9 @@
 //
 //  Created by Jarno Kibies on 10.12.25.
 //
+//  LOCAL-ONLY APP:
+//  Keine ownerId mehr - alle Leads gehören dem Gerät
+//
 
 import Foundation
 import SwiftUI
@@ -20,6 +23,7 @@ final class NewLeadViewModel: ObservableObject {
     @Published var company = ""
     @Published var email = ""
     @Published var phone = ""
+    @Published var website = ""
     @Published var notes = ""
     @Published var audioFilePath: String?
     @Published var originalImageFilename: String?
@@ -53,7 +57,6 @@ final class NewLeadViewModel: ObservableObject {
     // MARK: - Image Processing (OCR + QR-Code)
     
     /// Verarbeitet ein aufgenommenes Bild und extrahiert Kontaktdaten
-    /// Nutzt sowohl OCR als auch QR-Code-Erkennung, wobei QR-Daten priorisiert werden
     func processImage(_ image: UIImage) async {
         isProcessingImage = true
         isCloudOCRRunning = UserDefaults.standard.bool(forKey: "useCloudOCR")
@@ -61,7 +64,7 @@ final class NewLeadViewModel: ObservableObject {
         qrCodeURL = nil
         
         do {
-            // Bild-Verarbeitung: Nur Orientierung korrigieren
+            // Bild-Verarbeitung
             let finalImage = image.prepareForOCR()
             
             print("NewLeadViewModel: Bild verarbeitet - Original: \(image.size), Final: \(finalImage.size)")
@@ -74,7 +77,7 @@ final class NewLeadViewModel: ObservableObject {
                 print("NewLeadViewModel: Warnung - Bild konnte nicht gespeichert werden: \(error.localizedDescription)")
             }
             
-            // 2. Parallel: OCR und QR-Code-Erkennung mit finalem Bild starten
+            // 2. Parallel: OCR und QR-Code-Erkennung starten
             async let ocrTask = ocrService.recognizeText(from: finalImage)
             async let qrTask = ocrService.extractQRCode(from: finalImage)
             
@@ -86,7 +89,6 @@ final class NewLeadViewModel: ObservableObject {
             
             // OCR-Daten parsen
             if !recognizedLines.isEmpty {
-                // Nutze analyzeContact (async), welche automatisch zwischen Cloud und Lokal wählt
                 ocrContact = await ocrService.analyzeContact(from: recognizedLines)
             }
             
@@ -94,23 +96,19 @@ final class NewLeadViewModel: ObservableObject {
             if let content = qrContent {
                 qrCodeDetected = true
                 
-                // Sofortiges haptisches Feedback bei QR-Code-Erkennung
-                // Gibt dem Nutzer Sicherheit, dass der Code erkannt wurde
+                // Haptisches Feedback bei QR-Code-Erkennung
                 let qrFeedback = UINotificationFeedbackGenerator()
                 qrFeedback.notificationOccurred(.success)
                 
                 if ocrService.isVCard(content) {
-                    // vCard parsen
                     qrContact = vCardParser.parse(content)
                     print("NewLeadViewModel: vCard erkannt - \(qrContact?.name ?? "Kein Name")")
                 } else if ocrService.isURL(content) {
-                    // URL gefunden (z.B. LinkedIn)
                     let urlContact = vCardParser.parseURL(content)
                     qrContact = urlContact
                     qrCodeURL = content
                     print("NewLeadViewModel: URL erkannt - \(content)")
                 } else {
-                    // Unbekanntes Format - als Notiz speichern
                     print("NewLeadViewModel: QR-Code mit unbekanntem Format: \(content.prefix(100))")
                 }
             }
@@ -135,7 +133,6 @@ final class NewLeadViewModel: ObservableObject {
             if fieldsUpdated > 0 {
                 showOCRSuccessAnimation = true
                 
-                // Haptic Feedback (stärker wenn QR-Code erkannt)
                 let generator = UINotificationFeedbackGenerator()
                 generator.notificationOccurred(qrCodeDetected ? .success : .success)
                 
@@ -145,7 +142,6 @@ final class NewLeadViewModel: ObservableObject {
                 }
             }
             
-            // Cleanup Cloud UI State
             isCloudOCRRunning = false
             
         } catch let error as OCRError {
@@ -164,35 +160,22 @@ final class NewLeadViewModel: ObservableObject {
     }
     
     /// Führt OCR- und QR-Code-Daten zusammen
-    /// QR-Daten haben Priorität, da sie zuverlässiger sind
     private func mergeContacts(ocr: ParsedContact, qr: VCardParser.VCardContact?) -> ParsedContact {
         guard let qrData = qr, qrData.hasData else {
-            // Kein QR-Code - nur OCR-Daten verwenden
             return ocr
         }
         
         var merged = ParsedContact()
         
-        // Name: QR > OCR
         merged.name = !qrData.name.isEmpty ? qrData.name : ocr.name
-        
-        // Firma: QR > OCR
         merged.company = !qrData.company.isEmpty ? qrData.company : ocr.company
-        
-        // E-Mail: QR > OCR
         merged.email = !qrData.email.isEmpty ? qrData.email : ocr.email
-        
-        // Telefon: QR > OCR
         merged.phone = !qrData.phone.isEmpty ? qrData.phone : ocr.phone
         
         return merged
     }
     
     /// Aktualisiert die Formularfelder mit geparsten Daten
-    /// - Parameters:
-    ///   - contact: Die geparsten Kontaktdaten
-    ///   - url: Optionale URL (z.B. LinkedIn) aus QR-Code
-    /// - Returns: Anzahl der aktualisierten Felder
     private func updateFormFields(with contact: ParsedContact, url: String? = nil) -> Int {
         var updatedCount = 0
         
@@ -213,9 +196,9 @@ final class NewLeadViewModel: ObservableObject {
             updatedCount += 1
         }
         
-        // URL in Notizen speichern (falls vorhanden und Notizen leer)
-        if let urlString = url, !urlString.isEmpty, notes.isEmpty {
-            notes = "🔗 \(urlString)"
+        // URL im Website-Feld speichern
+        if let urlString = url, !urlString.isEmpty, website.isEmpty {
+            website = urlString
             updatedCount += 1
         }
         
@@ -224,7 +207,6 @@ final class NewLeadViewModel: ObservableObject {
     
     // MARK: - Audio Recording
     
-    /// Startet die Audioaufnahme
     func startRecording() {
         do {
             audioFilePath = try audioService.startRecording(for: leadId)
@@ -234,12 +216,10 @@ final class NewLeadViewModel: ObservableObject {
         }
     }
     
-    /// Stoppt die Audioaufnahme
     func stopRecording() {
         audioService.stopRecording()
     }
     
-    /// Löscht die aktuelle Aufnahme
     func deleteRecording() {
         if let path = audioFilePath {
             audioService.deleteRecording(at: path)
@@ -249,7 +229,6 @@ final class NewLeadViewModel: ObservableObject {
     
     // MARK: - Validation
     
-    /// Prüft ob das Formular valide ist
     var isValid: Bool {
         !name.isEmpty || !email.isEmpty || !phone.isEmpty || !company.isEmpty
     }
@@ -257,7 +236,6 @@ final class NewLeadViewModel: ObservableObject {
     // MARK: - Save
     
     /// Speichert den Lead in der Datenbank
-    /// Setzt automatisch die ownerId auf den aktuellen Supabase-User
     func saveLead(context: ModelContext) -> Bool {
         guard isValid else {
             errorMessage = "Bitte fülle mindestens ein Kontaktfeld aus."
@@ -267,16 +245,13 @@ final class NewLeadViewModel: ObservableObject {
         
         isSaving = true
         
-        // Owner ID: Supabase User-ID oder Fallback "local_user"
-        let currentOwnerId = SupabaseManager.shared.currentUserId?.uuidString ?? "local_user"
-        
         let lead = Lead(
             id: leadId,
-            ownerId: currentOwnerId,
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             company: company.trimmingCharacters(in: .whitespacesAndNewlines),
             email: email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
             phone: phone.trimmingCharacters(in: .whitespacesAndNewlines),
+            website: website.trimmingCharacters(in: .whitespacesAndNewlines),
             notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
             audioFilePath: audioFilePath,
             originalImageFilename: originalImageFilename
@@ -290,22 +265,18 @@ final class NewLeadViewModel: ObservableObject {
     
     // MARK: - Reset
     
-    /// Setzt alle Formularfelder zurück
     func reset() {
         name = ""
         company = ""
         email = ""
         phone = ""
+        website = ""
         notes = ""
         
-        // Audio löschen falls vorhanden
         deleteRecording()
-        
-        // Bild löschen falls vorhanden
         deleteImage()
     }
     
-    /// Löscht das gespeicherte Bild
     func deleteImage() {
         if let filename = originalImageFilename {
             imageStorageService.deleteImage(filename: filename)
@@ -313,4 +284,3 @@ final class NewLeadViewModel: ObservableObject {
         }
     }
 }
-

@@ -4,6 +4,9 @@
 //
 //  Created by Jarno Kibies on 14.12.25.
 //
+//  LOCAL-ONLY APP:
+//  Zeigt Statistiken über alle lokalen Leads
+//
 
 import SwiftUI
 import SwiftData
@@ -16,7 +19,6 @@ struct StatsView: View {
     
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Lead.createdAt, order: .reverse) private var leads: [Lead]
-    @ObservedObject private var supabase = SupabaseManager.shared
     
     // MARK: - Body
     
@@ -42,14 +44,6 @@ struct StatsView: View {
         }
     }
     
-    // MARK: - Filtered Leads (Multi-Tenancy)
-    
-    private var userLeads: [Lead] {
-        // Filtere nur Leads des aktuellen Users
-        guard let currentUserId = supabase.currentUserId?.uuidString else { return [] }
-        return leads.filter { $0.ownerId == currentUserId || $0.ownerId == "local_user" }
-    }
-    
     // MARK: - Cards
     
     private var totalLeadsCard: some View {
@@ -58,7 +52,7 @@ struct StatsView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             
-            Text("\(userLeads.count)")
+            Text("\(leads.count)")
                 .font(.system(size: 48, weight: .bold, design: .rounded))
                 .foregroundStyle(Color.accentColor)
         }
@@ -87,7 +81,6 @@ struct StatsView: View {
                 }
                 .frame(height: 200)
             } else {
-                // Fallback für ältere iOS Versionen (sollte bei iOS 17+ Project nicht nötig sein)
                 Text("Charts benötigen iOS 16+")
                     .foregroundStyle(.secondary)
                     .frame(height: 200)
@@ -115,7 +108,7 @@ struct StatsView: View {
         for i in (0..<7).reversed() {
             if let date = calendar.date(byAdding: .day, value: -i, to: today) {
                 let dayName = getDayName(date: date)
-                let count = userLeads.filter { calendar.isDate($0.createdAt, inSameDayAs: date) }.count
+                let count = leads.filter { calendar.isDate($0.createdAt, inSameDayAs: date) }.count
                 results.append(DailyLeadCount(date: date, dayName: dayName, count: count))
             }
         }

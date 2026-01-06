@@ -4,10 +4,9 @@
 //
 //  Created by Jarno Kibies on 14.12.25.
 //
-//  ARCHITEKTUR-HINWEIS:
-//  - Freemium-Modell mit Credit-System
-//  - Neue User bekommen 20 kostenlose Credits
-//  - Pro-User bekommen unbegrenzte Credits (oder können nachkaufen)
+//  LOCAL-ONLY APP:
+//  Credits werden lokal via UserDefaults verwaltet.
+//  Neue User bekommen 20 kostenlose Credits.
 //
 
 import Foundation
@@ -18,7 +17,7 @@ import StoreKit
 // MARK: - Subscription Manager
 // ============================================
 
-/// Zentraler Manager für Credits und Subscription-Status
+/// Zentraler Manager für Credits (lokal gespeichert)
 /// Singleton-Pattern für globalen Zugriff
 @MainActor
 final class SubscriptionManager: ObservableObject {
@@ -26,6 +25,17 @@ final class SubscriptionManager: ObservableObject {
     // MARK: - Singleton
     
     static let shared = SubscriptionManager()
+    
+    // MARK: - Constants
+    
+    /// Anzahl der Credits, die neue User bekommen
+    static let initialCredits = 20
+    
+    /// UserDefaults Key für Credits
+    private static let creditsKey = "messememo.local.credits"
+    
+    /// UserDefaults Key für "First Launch" Check
+    private static let hasLaunchedKey = "messememo.hasLaunched"
     
     // MARK: - Published Properties
     
@@ -46,65 +56,81 @@ final class SubscriptionManager: ObservableObject {
     
     // MARK: - Private Properties
     
-    private var cancellables = Set<AnyCancellable>()
-    private let supabase = SupabaseManager.shared
-    
-    // MARK: - Constants
-    
-    /// Anzahl der Credits, die neue User bekommen
-    static let initialCredits = 20
+    private let defaults = UserDefaults.standard
     
     // MARK: - Initialization
     
     private init() {
-        setupProfileObserver()
+        setupInitialCredits()
+        loadCredits()
     }
     
     // MARK: - Setup
     
-    /// Beobachtet Änderungen am User-Profil und aktualisiert Credits/Status
-    private func setupProfileObserver() {
-        supabase.$userProfile
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] profile in
-                guard let self = self else { return }
-                
-                if let profile = profile {
-                    self.credits = profile.aiCreditsBalance
-                    self.isPremium = profile.isPremium
-                    self.subscriptionType = profile.isPremium ? .premium : .free
-                } else {
-                    self.credits = 0
-                    self.isPremium = false
-                    self.subscriptionType = .free
-                }
-            }
-            .store(in: &cancellables)
+    /// Gibt neue User ihre Start-Credits
+    private func setupInitialCredits() {
+        let hasLaunched = defaults.bool(forKey: Self.hasLaunchedKey)
+        
+        if !hasLaunched {
+            // Erster Start - Credits setzen
+            defaults.set(Self.initialCredits, forKey: Self.creditsKey)
+            defaults.set(true, forKey: Self.hasLaunchedKey)
+            print("SubscriptionManager: Erster Start - \(Self.initialCredits) Credits vergeben")
+        }
+    }
+    
+    /// Lädt Credits aus UserDefaults
+    private func loadCredits() {
+        credits = defaults.integer(forKey: Self.creditsKey)
+        print("SubscriptionManager: \(credits) Credits geladen")
+    }
+    
+    // MARK: - Credits Management
+    
+    /// Verbraucht einen Credit
+    /// - Returns: `true` wenn erfolgreich, `false` wenn keine Credits mehr
+    func useCredit() -> Bool {
+        guard credits > 0 else {
+            return false
+        }
+        
+        credits -= 1
+        defaults.set(credits, forKey: Self.creditsKey)
+        print("SubscriptionManager: Credit verbraucht - \(credits) verbleibend")
+        return true
+    }
+    
+    /// Fügt Credits hinzu (z.B. nach Kauf)
+    func addCredits(_ amount: Int) {
+        credits += amount
+        defaults.set(credits, forKey: Self.creditsKey)
+        print("SubscriptionManager: \(amount) Credits hinzugefügt - \(credits) gesamt")
+    }
+    
+    /// Setzt Credits auf einen bestimmten Wert (z.B. nach IAP-Restore)
+    func setCredits(_ amount: Int) {
+        credits = amount
+        defaults.set(credits, forKey: Self.creditsKey)
     }
     
     // MARK: - Credits & Access Control
     
-    /// Prüft, ob der User genug Credits für eine KI-Generierung hat
+    /// Prüft, ob der User genug Credits hat
     var hasCredits: Bool {
         credits > 0 || isPremium
     }
     
     /// Prüft, ob ein Feature verfügbar ist
-    /// - Parameter feature: Das zu prüfende Feature
-    /// - Returns: `true` wenn das Feature verfügbar ist
     func canAccess(_ feature: PremiumFeature) -> Bool {
         switch feature {
         case .aiEmailGeneration:
-            // KI-Mails benötigen Credits ODER Premium
             return hasCredits
         case .unlimitedLeads:
-            // Unbegrenzte Leads nur für Premium
             return isPremium
         case .cloudSync:
-            // Cloud Sync ist für alle verfügbar (via iCloud)
-            return true
+            // CloudKit ist deaktiviert
+            return false
         case .advancedExport:
-            // Erweiterter Export nur für Premium
             return isPremium
         }
     }
@@ -128,30 +154,20 @@ final class SubscriptionManager: ObservableObject {
         }
     }
     
-    // MARK: - Refresh
+    // MARK: - Refresh (für UI-Updates)
     
-    /// Lädt den Status neu
     func refreshStatus() async {
-        isLoading = true
-        defer { isLoading = false }
-        
-        await supabase.refreshProfile()
+        loadCredits()
     }
     
     // MARK: - In-App Purchase (Credit Packs)
     
     /// Kauft ein Credit-Paket
-    /// - Parameter pack: Das zu kaufende Paket
     func purchaseCredits(pack: CreditPack) async throws {
         isLoading = true
         defer { isLoading = false }
         
         // TODO: StoreKit 2 Implementation für Credit-Packs
-        // 1. Produkt laden via StoreKit
-        // 2. Kauf durchführen
-        // 3. Receipt validieren (serverseitig)
-        // 4. Credits in profiles Tabelle hinzufügen
-        
         throw SubscriptionError.notImplemented
     }
     
@@ -161,7 +177,6 @@ final class SubscriptionManager: ObservableObject {
         defer { isLoading = false }
         
         // TODO: StoreKit 2 Implementation für Subscription
-        
         throw SubscriptionError.notImplemented
     }
     
@@ -171,8 +186,7 @@ final class SubscriptionManager: ObservableObject {
         defer { isLoading = false }
         
         // TODO: StoreKit 2 Restore Implementation
-        
-        await refreshStatus()
+        loadCredits()
     }
 }
 

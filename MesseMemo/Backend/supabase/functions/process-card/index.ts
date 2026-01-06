@@ -142,6 +142,9 @@ JSON Struktur:
 Falls ein Feld nicht gefunden wird, lasse es leer ("").
 Korrigiere offensichtliche OCR-Fehler bei E-Mail oder Telefonnummern.
 
+WICHTIG: Suche im Text auch nach Hinweisen auf QR-Codes oder vCard-Rohdaten. 
+Falls eine URL oder vCard-Daten gefunden werden, extrahiere diese bevorzugt in die entsprechenden Felder!
+
 OCR-Text:
 ${textToAnalyze}
 

@@ -4,16 +4,14 @@
 //
 //  Created by Jarno Kibies on 10.12.25.
 //
-//  MULTI-TENANCY:
-//  Leads werden nach ownerId gefiltert, sodass jeder User nur seine eigenen sieht.
-//  Das Filtering erfolgt im LeadsViewModel.filterLeads()
+//  LOCAL-ONLY APP:
+//  Alle Leads werden angezeigt (keine Auth-Prüfung)
 //
 
 import SwiftUI
 import SwiftData
 
 /// Hauptansicht mit der Liste aller Leads
-/// Multi-Tenancy: Zeigt nur Leads des aktuell eingeloggten Users
 struct DashboardView: View {
     
     // MARK: - Environment
@@ -21,18 +19,17 @@ struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Lead.createdAt, order: .reverse) private var leads: [Lead]
     
-    // MARK: - Supabase (für Refresh bei Login-Änderung)
-    
-    @ObservedObject private var supabase = SupabaseManager.shared
-    
     // MARK: - State
     
     @StateObject private var viewModel = LeadsViewModel()
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
     @State private var showNewLead = false
-    @State private var showSettings = false
     
-    /// Gefilterte Leads (nur die des aktuellen Users)
-    private var userLeads: [Lead] {
+    // Binding für Action Button (Scanner direkt öffnen)
+    @Binding var shouldOpenScanner: Bool
+    
+    /// Gefilterte Leads
+    private var filteredLeads: [Lead] {
         viewModel.filterLeads(leads)
     }
     
@@ -49,26 +46,29 @@ struct DashboardView: View {
                     // Custom Header
                     customHeader
                     
-                    if userLeads.isEmpty {
+                    if filteredLeads.isEmpty {
                         emptyStateView
                             .frame(maxHeight: .infinity)
                     } else {
                         // Card List
                         ScrollView {
                             LazyVStack(spacing: 16) {
-                                ForEach(userLeads) { lead in
+                                ForEach(filteredLeads) { lead in
                                     NavigationLink(destination: LeadDetailView(lead: lead)) {
                                         LeadCardView(lead: lead)
                                     }
-                                    .buttonStyle(.plain) // Wichtig damit die Card nicht blau wird
+                                    .buttonStyle(.plain)
                                 }
                             }
                             .padding()
                         }
                     }
                 }
+                
+                // Floating Action Button
+                floatingActionButton
             }
-            .navigationBarHidden(true) // Standard Navbar verstecken
+            .navigationBarHidden(true)
             .sheet(isPresented: $showNewLead) {
                 NewLeadView()
             }
@@ -82,9 +82,11 @@ struct DashboardView: View {
             } message: {
                 Text(viewModel.errorMessage)
             }
-            // Reagiert auf Auth-Änderungen (Login/Logout) um die Liste zu aktualisieren
-            .onChange(of: supabase.currentUserId) { _, _ in
-                // SwiftUI aktualisiert automatisch, da userLeads computed ist
+            .onChange(of: shouldOpenScanner) { _, newValue in
+                if newValue {
+                    showNewLead = true
+                    shouldOpenScanner = false
+                }
             }
         }
     }
@@ -98,6 +100,7 @@ struct DashboardView: View {
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(.primary)
                 
+                // Credit Badge
                 Text("\(subscriptionManager.credits) Credits")
                     .font(.caption)
                     .fontWeight(.semibold)
@@ -110,23 +113,49 @@ struct DashboardView: View {
             
             Spacer()
             
-            // Add Lead Button (Mini)
-            Button(action: { showNewLead = true }) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 32))
-                    .foregroundStyle(Color.accentColor)
-                    .shadow(color: Color.accentColor.opacity(0.3), radius: 4, y: 2)
+            // Leads Counter
+            if !leads.isEmpty {
+                Text("\(leads.count) Kontakte")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal)
         .padding(.top, 16)
         .padding(.bottom, 8)
-        .background(Color(.systemGray6)) // Blendet mit Hintergrund
+        .background(Color(.systemGray6))
     }
     
-    // MARK: - Subscription Manager
+    // MARK: - Floating Action Button (groß und prominent)
     
-    @ObservedObject private var subscriptionManager = SubscriptionManager.shared
+    private var floatingActionButton: some View {
+        VStack {
+            Spacer()
+            HStack {
+                Spacer()
+                Button(action: { showNewLead = true }) {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [.blue, .purple],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 64, height: 64)
+                            .shadow(color: .blue.opacity(0.4), radius: 12, x: 0, y: 6)
+                        
+                        Image(systemName: "plus.viewfinder")
+                            .font(.system(size: 28, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                }
+                .padding(.trailing, 20)
+                .padding(.bottom, 20)
+            }
+        }
+    }
     
     // MARK: - Empty State
     
@@ -137,8 +166,11 @@ struct DashboardView: View {
             Text("Erfasse deinen ersten Lead auf einer Messe, indem du eine Visitenkarte scannst.")
         } actions: {
             Button(action: { showNewLead = true }) {
-                Text("Ersten Kontakt erfassen")
-                    .fontWeight(.semibold)
+                HStack {
+                    Image(systemName: "plus.viewfinder")
+                    Text("Ersten Kontakt erfassen")
+                }
+                .fontWeight(.semibold)
             }
             .buttonStyle(.borderedProminent)
         }
@@ -160,7 +192,6 @@ struct ShareSheet: UIViewControllerRepresentable {
 // MARK: - Preview
 
 #Preview {
-    DashboardView()
+    DashboardView(shouldOpenScanner: .constant(false))
         .modelContainer(for: Lead.self, inMemory: true)
 }
-

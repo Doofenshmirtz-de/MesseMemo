@@ -159,21 +159,27 @@ final class OCRService {
         
         if useCloud {
             print("OCRService: Versuche Cloud KI Analyse...")
-            // Prüfe ob User eingeloggt und Credits hat
-            if SupabaseManager.shared.isAuthenticated && SupabaseManager.shared.hasCredits {
+            
+            // Prüfe lokale Credits
+            if SubscriptionManager.shared.hasCredits {
+                // Credit vorher abziehen
+                guard SubscriptionManager.shared.useCredit() else {
+                    print("OCRService: Keine Credits mehr. Fallback auf Lokal.")
+                    return parseContactInfo(from: lines)
+                }
+                
                 do {
                     let result = try await SupabaseManager.shared.processCard(text: lines)
-                    print("OCRService: Cloud Analyse erfolgreich. Credits remaining: \(result.creditsRemaining)")
+                    print("OCRService: Cloud Analyse erfolgreich.")
                     
                     // Convert Cloud Data to ParsedContact
                     var contact = ParsedContact()
-                    contact.name = result.data.name ?? ""
-                    contact.company = result.data.company ?? ""
-                    contact.email = result.data.email ?? ""
-                    contact.phone = result.data.phone ?? ""
+                    contact.name = result.name ?? ""
+                    contact.company = result.company ?? ""
+                    contact.email = result.email ?? ""
+                    contact.phone = result.phone ?? ""
                     
-                    // Fallback für leere Felder: Lokale Logik dazumischen?
-                    // Optional: Wenn KI versagt (leere Felder), lokal nachbessern
+                    // Fallback für leere Felder: Lokale Logik dazumischen
                     if contact.name.isEmpty || contact.email.isEmpty {
                          let localContact = parseContactInfo(from: lines)
                          if contact.name.isEmpty { contact.name = localContact.name }
@@ -184,10 +190,12 @@ final class OCRService {
                     
                     return contact
                 } catch {
+                    // Credit zurückgeben bei Fehler
+                    SubscriptionManager.shared.addCredits(1)
                     print("OCRService: Cloud Analyse fehlgeschlagen: \(error). Fallback auf Lokal.")
                 }
             } else {
-                print("OCRService: Cloud KI aktiv, aber kein User/Credit. Fallback auf Lokal.")
+                print("OCRService: Cloud KI aktiv, aber keine Credits. Fallback auf Lokal.")
             }
         }
         
@@ -460,15 +468,37 @@ final class OCRService {
     
     // MARK: - Company Detection
     
+    /// Deutsche/Internationale Rechtsformen für sichere Firmenerkennung
+    private let legalForms = [
+        // Deutsche Rechtsformen (hohe Priorität)
+        "GmbH", "GmbH & Co. KG", "GmbH & Co. KGaA", "AG", "SE", "KG", "OHG", "e.V.", "e.G.",
+        "mbH", "UG", "UG (haftungsbeschränkt)", "KGaA", "PartG", "PartGmbB",
+        // Internationale Rechtsformen
+        "Inc.", "Inc", "Corp.", "Corp", "Corporation", "Ltd.", "Ltd", "Limited",
+        "LLC", "LLP", "PLC", "S.A.", "S.L.", "B.V.", "N.V.", "Pty Ltd", "SRL", "SpA", "SARL", "SAS"
+    ]
+    
     /// Berechnet einen Score, wie wahrscheinlich der Text ein Firmenname ist
+    /// WICHTIG: Zeilen mit Rechtsformen (GmbH, AG, etc.) werden stark priorisiert
     private func calculateCompanyScore(_ text: String) -> Int {
         var score = 0
         
-        // Bonus: Enthält Firmen-Suffix
-        for suffix in companySuffixes {
-            if text.localizedCaseInsensitiveContains(suffix) {
-                score += 50
+        // HÖCHSTE PRIORITÄT: Enthält Rechtsform
+        // Wenn eine Zeile "GmbH", "AG", "Ltd" etc. enthält, ist es fast sicher eine Firma
+        for legalForm in legalForms {
+            if text.localizedCaseInsensitiveContains(legalForm) {
+                score += 100  // Sehr hoher Score für Rechtsformen
                 break
+            }
+        }
+        
+        // Bonus: Enthält Firmen-Suffix (weniger spezifisch als Rechtsform)
+        if score == 0 {
+            for suffix in companySuffixes {
+                if text.localizedCaseInsensitiveContains(suffix) {
+                    score += 50
+                    break
+                }
             }
         }
         
@@ -482,10 +512,12 @@ final class OCRService {
             score += 10
         }
         
-        // Malus: Sieht aus wie ein Name
-        let nameScore = calculateNameScore(text, position: 99)
-        if nameScore > 20 && score < 40 {
-            score = 0
+        // Malus: Sieht aus wie ein Name (nur wenn keine Rechtsform gefunden)
+        if score < 100 {
+            let nameScore = calculateNameScore(text, position: 99)
+            if nameScore > 20 && score < 40 {
+                score = 0
+            }
         }
         
         return score
@@ -516,7 +548,9 @@ final class OCRService {
                 // Suche nach QR-Codes und extrahiere den Inhalt
                 for observation in observations {
                     if observation.symbology == .qr, let payload = observation.payloadStringValue {
-                        continuation.resume(returning: payload)
+                        // Bereinige den Payload
+                        let cleanedPayload = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+                        continuation.resume(returning: cleanedPayload)
                         return
                     }
                 }

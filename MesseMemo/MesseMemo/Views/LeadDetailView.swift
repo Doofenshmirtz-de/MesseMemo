@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import ContactsUI
 
 /// Detailansicht eines Leads
 struct LeadDetailView: View {
@@ -26,6 +27,8 @@ struct LeadDetailView: View {
     @State private var showPaywall = false
     @State private var paywallTriggerFeature: PremiumFeature?
     @State private var showCopyFeedback = false
+    @State private var showContactSheet = false
+    @State private var showContactSaved = false
     
     // MARK: - Initialization
     
@@ -116,6 +119,17 @@ struct LeadDetailView: View {
             BusinessCardFullscreenView(
                 image: viewModel.originalImage,
                 onDismiss: { viewModel.showOriginalImageFullscreen = false }
+            )
+        }
+        .sheet(isPresented: $showContactSheet) {
+            ContactSheetView(
+                contact: viewModel.createContact(),
+                onSave: {
+                    showContactSaved = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        showContactSaved = false
+                    }
+                }
             )
         }
         .onDisappear {
@@ -508,6 +522,33 @@ struct LeadDetailView: View {
                 .disabled(viewModel.originalImage == nil)
             }
             
+            // Zu iOS Kontakten hinzufügen
+            Button {
+                Task {
+                    let granted = await viewModel.requestContactsAccess()
+                    if granted {
+                        showContactSheet = true
+                    } else {
+                        viewModel.errorMessage = "Bitte erlaube den Zugriff auf Kontakte in den Einstellungen."
+                        viewModel.showError = true
+                    }
+                }
+            } label: {
+                HStack {
+                    Image(systemName: showContactSaved ? "checkmark.circle.fill" : "person.crop.circle.badge.plus")
+                        .foregroundStyle(showContactSaved ? .green : .blue)
+                    Text(showContactSaved ? "Kontakt gespeichert!" : "Zu Kontakten hinzufügen")
+                        .foregroundStyle(showContactSaved ? .green : .primary)
+                    Spacer()
+                    if !showContactSaved {
+                        Image(systemName: "arrow.up.right")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+            .sensoryFeedback(.success, trigger: showContactSaved)
+            
             Button(action: {
                 viewModel.copyToClipboard()
                 showCopyFeedback = true
@@ -568,6 +609,42 @@ struct LeadDetailView: View {
                     viewModel.isEditing = true
                 }
             }
+        }
+    }
+}
+
+// MARK: - Contact Sheet View
+
+struct ContactSheetView: UIViewControllerRepresentable {
+    let contact: CNMutableContact
+    var onSave: () -> Void
+    
+    func makeUIViewController(context: Context) -> UINavigationController {
+        let viewController = CNContactViewController(forNewContact: contact)
+        viewController.delegate = context.coordinator
+        
+        let navigationController = UINavigationController(rootViewController: viewController)
+        return navigationController
+    }
+    
+    func updateUIViewController(_ uiViewController: UINavigationController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onSave: onSave)
+    }
+    
+    class Coordinator: NSObject, CNContactViewControllerDelegate {
+        var onSave: () -> Void
+        
+        init(onSave: @escaping () -> Void) {
+            self.onSave = onSave
+        }
+        
+        func contactViewController(_ viewController: CNContactViewController, didCompleteWith contact: CNContact?) {
+            if contact != nil {
+                onSave()
+            }
+            viewController.dismiss(animated: true)
         }
     }
 }

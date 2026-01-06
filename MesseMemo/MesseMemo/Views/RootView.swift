@@ -4,34 +4,42 @@
 //
 //  Created by Jarno Kibies on 14.12.25.
 //
+//  LOCAL-ONLY APP:
+//  Keine Auth-Prüfung mehr - direkt zum Dashboard
+//
 
 import SwiftUI
 
-/// Root View die zwischen Auth und Dashboard wechselt
+/// Root View mit kurzem Splash Screen
 struct RootView: View {
     
-    @StateObject private var supabase = SupabaseManager.shared
-    @State private var isCheckingAuth = true
+    @State private var showSplash = true
+    
+    // Binding für Action Button Intent (Scan direkt starten)
+    @State private var shouldOpenScanner = false
     
     var body: some View {
         Group {
-            if isCheckingAuth {
-                // Splash Screen während Auth-Check
+            if showSplash {
                 splashView
-            } else if supabase.isAuthenticated {
-                // User ist eingeloggt
-                MainTabView()
             } else {
-                // User ist nicht eingeloggt
-                AuthView()
+                MainTabView(shouldOpenScanner: $shouldOpenScanner)
             }
         }
-        .animation(.easeInOut, value: supabase.isAuthenticated)
+        .animation(.easeInOut(duration: 0.3), value: showSplash)
         .task {
-            // Kurze Verzögerung für Splash-Effekt
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
-            await supabase.checkAuthState()
-            isCheckingAuth = false
+            // Kurzer Splash Screen (0.8s)
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            showSplash = false
+        }
+        .onOpenURL { url in
+            handleDeepLink(url: url)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openScanner)) { _ in
+            // Warte kurz bis App vollständig geladen
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                shouldOpenScanner = true
+            }
         }
     }
     
@@ -62,9 +70,17 @@ struct RootView: View {
             }
         }
     }
+    
+    // MARK: - Deep Link Handler (für Action Button)
+    
+    private func handleDeepLink(url: URL) {
+        // messememo://scan - Öffnet direkt den Scanner
+        if url.host == "scan" {
+            shouldOpenScanner = true
+        }
+    }
 }
 
 #Preview {
     RootView()
 }
-

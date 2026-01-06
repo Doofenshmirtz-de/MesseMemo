@@ -4,8 +4,8 @@
 //
 //  Created by Jarno Kibies on 10.12.25.
 //
-//  MULTI-TENANCY:
-//  Leads werden nach ownerId gefiltert, sodass jeder User nur seine eigenen sieht.
+//  LOCAL-ONLY APP:
+//  Alle Leads werden angezeigt (keine Owner-Filterung mehr)
 //
 
 import Foundation
@@ -14,7 +14,6 @@ import SwiftData
 import Combine
 
 /// ViewModel für die Verwaltung von Leads
-/// Implementiert Multi-Tenancy: Jeder User sieht nur seine eigenen Leads
 @MainActor
 final class LeadsViewModel: ObservableObject {
     
@@ -31,35 +30,10 @@ final class LeadsViewModel: ObservableObject {
     
     private let csvExportService = CSVExportService()
     
-    // MARK: - Multi-Tenancy
+    // MARK: - Filtering
     
-    /// Gibt die aktuelle Owner-ID zurück (Supabase User-ID oder Fallback)
-    var currentOwnerId: String {
-        SupabaseManager.shared.currentUserId?.uuidString ?? "local_user"
-    }
-    
-    /// Filtert Leads nach Owner-ID UND Suchtext
-    /// Dies ist die Hauptmethode für Multi-Tenancy auf App-Ebene
+    /// Filtert Leads nach Suchtext
     func filterLeads(_ leads: [Lead]) -> [Lead] {
-        // 1. Zuerst nach Owner filtern (Multi-Tenancy)
-        let ownedLeads = leads.filter { lead in
-            lead.ownerId == currentOwnerId
-        }
-        
-        // 2. Dann nach Suchtext filtern (falls vorhanden)
-        guard !searchText.isEmpty else { return ownedLeads }
-        
-        return ownedLeads.filter { lead in
-            lead.name.localizedCaseInsensitiveContains(searchText) ||
-            lead.company.localizedCaseInsensitiveContains(searchText) ||
-            lead.email.localizedCaseInsensitiveContains(searchText) ||
-            lead.phone.contains(searchText)
-        }
-    }
-    
-    /// Filtert Leads nur nach Suchtext (ohne Owner-Filter)
-    /// Nützlich wenn die Leads bereits vorselektiert sind
-    func filterBySearchText(_ leads: [Lead]) -> [Lead] {
         guard !searchText.isEmpty else { return leads }
         
         return leads.filter { lead in
@@ -103,6 +77,11 @@ final class LeadsViewModel: ObservableObject {
             audioService.deleteRecording(at: audioPath)
         }
         
+        // Bild löschen falls vorhanden
+        if let imageFilename = lead.originalImageFilename {
+            ImageStorageService.shared.deleteImage(filename: imageFilename)
+        }
+        
         // Lead aus der Datenbank löschen
         context.delete(lead)
     }
@@ -114,4 +93,3 @@ final class LeadsViewModel: ObservableObject {
         }
     }
 }
-

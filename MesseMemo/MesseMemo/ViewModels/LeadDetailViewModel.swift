@@ -9,6 +9,8 @@ import Foundation
 import SwiftUI
 import SwiftData
 import Combine
+import Contacts
+import ContactsUI
 
 /// ViewModel für die Detailansicht eines Leads
 @MainActor
@@ -282,7 +284,7 @@ final class LeadDetailViewModel: ObservableObject {
     // MARK: - AI Email Generation
     
     /// Generiert eine KI-basierte Follow-Up E-Mail
-    /// Verbraucht 1 Credit bei Erfolg
+    /// Verbraucht 1 Credit lokal bei Erfolg
     func generateAIEmail() async {
         isGeneratingEmail = true
         
@@ -290,25 +292,33 @@ final class LeadDetailViewModel: ObservableObject {
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
         
+        // Credit prüfen und verbrauchen
+        guard SubscriptionManager.shared.useCredit() else {
+            errorMessage = "Kein Guthaben mehr. Bitte lade dein Konto auf, um weitere Mails zu generieren."
+            showError = true
+            isGeneratingEmail = false
+            return
+        }
+        
         do {
             // Generiere E-Mail via Supabase Edge Function
-            let result = try await SupabaseManager.shared.generateEmail(
+            let email = try await SupabaseManager.shared.generateEmail(
                 name: lead.name,
                 company: lead.company,
                 transcript: lead.transcript ?? lead.notes
             )
             
-            generatedAIEmail = result.email
+            generatedAIEmail = email
             showAIMailComposer = true
             
             // Erfolgs-Feedback
             let successGenerator = UINotificationFeedbackGenerator()
             successGenerator.notificationOccurred(.success)
             
-            // Profile aktualisieren um neuen Credit-Stand anzuzeigen
-            await SupabaseManager.shared.refreshProfile()
-            
         } catch {
+            // Credit zurückgeben bei Fehler
+            SubscriptionManager.shared.addCredits(1)
+            
             // Error-Feedback
             let errorGenerator = UINotificationFeedbackGenerator()
             errorGenerator.notificationOccurred(.error)
@@ -316,10 +326,6 @@ final class LeadDetailViewModel: ObservableObject {
             // Benutzerfreundliche Fehlermeldung
             if let supabaseError = error as? SupabaseError {
                 switch supabaseError {
-                case .noCredits:
-                    errorMessage = "Kein Guthaben mehr. Bitte lade dein Konto auf, um weitere Mails zu generieren."
-                case .notAuthenticated:
-                    errorMessage = "Bitte melde dich an, um die KI-Funktion zu nutzen."
                 case .emailGenerationFailed(let reason):
                     errorMessage = "E-Mail konnte nicht generiert werden: \(reason)"
                 case .networkError:
@@ -367,5 +373,94 @@ final class LeadDetailViewModel: ObservableObject {
         // Haptic Feedback
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
+    }
+    
+    // MARK: - iOS Contacts Integration
+    
+    /// Erstellt ein CNMutableContact aus den Lead-Daten
+    func createContact() -> CNMutableContact {
+        let contact = CNMutableContact()
+        
+        // Name aufteilen (Vorname Nachname)
+        let nameParts = lead.name.split(separator: " ", maxSplits: 1)
+        if nameParts.count >= 2 {
+            contact.givenName = String(nameParts[0])
+            contact.familyName = String(nameParts[1])
+        } else if !lead.name.isEmpty {
+            contact.givenName = lead.name
+        }
+        
+        // Firma
+        if !lead.company.isEmpty {
+            contact.organizationName = lead.company
+        }
+        
+        // E-Mail
+        if !lead.email.isEmpty {
+            contact.emailAddresses = [
+                CNLabeledValue(label: CNLabelWork, value: lead.email as NSString)
+            ]
+        }
+        
+        // Telefon
+        if !lead.phone.isEmpty {
+            contact.phoneNumbers = [
+                CNLabeledValue(label: CNLabelPhoneNumberMobile, value: CNPhoneNumber(stringValue: lead.phone))
+            ]
+        }
+        
+        // Website
+        if !lead.website.isEmpty {
+            contact.urlAddresses = [
+                CNLabeledValue(label: CNLabelWork, value: lead.website as NSString)
+            ]
+        }
+        
+        // Notizen
+        if !lead.notes.isEmpty {
+            contact.note = lead.notes
+        }
+        
+        // Bild (falls vorhanden)
+        if let image = originalImage,
+           let imageData = image.jpegData(compressionQuality: 0.8) {
+            contact.imageData = imageData
+        }
+        
+        return contact
+    }
+    
+    /// Speichert den Lead direkt als iOS-Kontakt
+    func saveAsContact() -> Bool {
+        let contact = createContact()
+        let saveRequest = CNSaveRequest()
+        saveRequest.add(contact, toContainerWithIdentifier: nil)
+        
+        do {
+            let store = CNContactStore()
+            try store.execute(saveRequest)
+            
+            // Erfolgs-Feedback
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
+            
+            return true
+        } catch {
+            errorMessage = "Kontakt konnte nicht gespeichert werden: \(error.localizedDescription)"
+            showError = true
+            return false
+        }
+    }
+    
+    /// Prüft ob Kontakte-Zugriff erlaubt ist
+    func requestContactsAccess() async -> Bool {
+        let store = CNContactStore()
+        
+        do {
+            let granted = try await store.requestAccess(for: .contacts)
+            return granted
+        } catch {
+            return false
+        }
     }
 }
